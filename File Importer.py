@@ -6,7 +6,7 @@ import ctypes
 import shutil
 import subprocess
 from pathlib import *
-from send2trash import send2trash
+# from send2trash import send2trash
 
 # def deleteF(path: str):   # use moveToTrash
 # 	return path.replace("/", "\\")
@@ -359,10 +359,19 @@ class Tree(QTreeView):
 
 		createFolderAction = QAction('Create Folder', self)
 		createFolderAction.triggered.connect(lambda event: self.createFolderPopup(event))
+		
+		duplicateFileFolderAction = QAction('Duplicate', self)
+		duplicateFileFolderAction.triggered.connect(lambda event: self.duplicateFolderPopup(event))
+
+		moveToRootAction = QAction('Move to Root', self)
+		moveToRootAction.triggered.connect(lambda event: self.moveToRootPopUp(event))
 
 		self.menu.addAction(renameAction)
 		self.menu.addAction(deleteFileAction)
+		self.menu.addAction(duplicateFileFolderAction)
+		self.menu.addAction(moveToRootAction)
 		self.menu.addAction(removeOuterFolderAction)
+		self.menu.addSeparator()
 		self.menu.addAction(moveToNewFolderAction)
 		self.menu.addAction(createFolderAction)
 
@@ -736,6 +745,60 @@ class Tree(QTreeView):
 
 				elif inmsgBox.clickedbutton == QMessageBox.No:
 					pass
+
+	def duplicateFolderPopup(self, event):
+		# note if selected is empty then do nothing
+
+		model = self.model()
+
+		print("algorithim for creating folders")
+
+		#warning: check if the folder exist
+
+		index_list = self.selectedIndexes()
+
+		for index in index_list:
+			if index.column() == 0:
+				fileIn: QFileInfo = model.fileInfo(index)
+
+				selected_file = fileIn.absoluteFilePath()
+				new_folder = multiCopyHandler(selected_file)
+				
+				if not os.path.exists(new_folder):  # you can diable this if statement but try to catch an error
+					os.mkdir(new_folder)
+
+			# note convert this to a redo method and just get tje new folder value and delete it
+			# note incase cancel was clicked, don't remove its folder and just move the files;
+				# file_to_rename = fileIn.absoluteFilePath()
+				# print(file_to_rename)
+				shutil.copytree(selected_file, new_folder)
+
+	def moveToRootPopUp(self, event):
+		# note if selected is empty then do nothing
+
+		model: QFileSystemModel = self.model()
+
+		print("algorithim for creating folders")
+
+		#warning: check if the folder exist
+
+		index_list = self.selectedIndexes()
+
+		for index in index_list:
+			if index.column() == 0:
+				fileIn: QFileInfo = model.fileInfo(index)
+
+				selected_file = fileIn.absoluteFilePath()
+				# new_folder = multiCopyHandler(selected_file)
+				
+				# if not os.path.exists(new_folder):  # you can diable this if statement but try to catch an error
+				# 	os.mkdir(new_folder)
+
+			# note convert this to a redo method and just get tje new folder value and delete it
+			# note incase cancel was clicked, don't remove its folder and just move the files;
+				# file_to_rename = fileIn.absoluteFilePath()
+				# print(file_to_rename)
+				shutil.move(selected_file, model.rootPath())
 
 class FileSystemView(QWidget):
 	global project_filenames
