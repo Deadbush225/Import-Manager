@@ -83,13 +83,11 @@ class unCreateFolderPopup(QUndoCommand):
 			file = QFile(self.new_folder)
 			self.restore_path = file.fileName()
 
-			dele = file.moveToTrash()
-			# print(dele)
+			file.moveToTrash()
 			self.recycle_path = file.fileName()
 
-			# deleteF(self.new_folder) #moved | use deleteF
 			# -> creating folder
-			os.mkdir(self.new_folder) #moved
+			os.mkdir(self.new_folder)
 			return
 
 		os.mkdir(self.new_folder)
@@ -110,28 +108,23 @@ class unMoveToNewFolderPopup(QUndoCommand):
 		self.new_folder = newfolder
 	
 	def redo(self):
-		# creating folder
+		# -> creating folder
 		print('redoing')
 		if self.override:
 			# -> deleting folder
 			file = QFile(self.new_folder)
 			self.restore_path = file.fileName()
 
-			dele = file.moveToTrash()
-			# print(dele)
+			file.moveToTrash()
 			self.recycle_path = file.fileName()
 
-			# deleteF(self.new_folder) #moved | use deleteF
 			# -> creating folder
-			os.mkdir(self.new_folder) #moved
+			os.mkdir(self.new_folder)
 		else:
 			os.mkdir(self.new_folder)
 
-		# moving files
-
+		# -> moving files
 		for index_fileinfo in self.index_list:
-			# index_fileinfo = self.model.fileInfo(index)
-			# fileIn = model.fileInfo(proxyModel.mapToSource(index))
 			self.original_folder = index_fileinfo.canonicalPath()
 
 			#warning: make sure that the folder will actually make the folder inside
@@ -141,14 +134,14 @@ class unMoveToNewFolderPopup(QUndoCommand):
 				shutil.move(file_to_rename, self.new_folder)
 	
 	def undo(self):
-		# moving files
+		# -> moving files
 		src_path = self.new_folder
 		trg_path = self.original_folder
 
 		for src_file in Path(src_path).glob('*.*'):
 			shutil.move(src_file, trg_path)
 
-		#delete the folder
+		# -> delete the folder
 		print('undoing')
 		if self.override:
 			shutil.move(self.recycle_path, self.restore_path)
@@ -171,43 +164,16 @@ class unRenamePopup(QUndoCommand):
 		self.converted = []
 
 	def redo(self):
-		# creating folder
-		# if self.override:
-		# 	# -> deleting folder
-		# 	file = QFile(self.new_folder)
-		# 	self.restore_path = file.fileName()
-
-		# 	dele = file.moveToTrash()
-		# 	# print(dele)
-		# 	self.recycle_path = file.fileName()
-
-		# 	# deleteF(self.new_folder) #moved | use deleteF
-		# 	# -> creating folder
-		# 	os.mkdir(self.new_folder) #moved
-		# else:
-		# 	os.mkdir(self.new_folder)
-
 		if self.one_file:
 			for index_fileinfo in self.index_list:
-				# file : QFileInfo = QFileInfo(self.new_file)
-				# if file.isDir():
-				# 	print(f"isDir -> {self.new_file}")
-				# 	# shutil.rmtree(self.new_file)
-					
-				# elif file.isFile():  
-				# 	print(f"isFile -> {self.new_file}")
-				# 	# os.remove(self.new_file)
-				# 	file.
-
-				# removing the folder/file
+				# -> removing the folder/file
 				file = QFile(self.new_file)
 				self.restore_path = file.fileName()
 
-				dele = file.moveToTrash()
-				# print(dele)
+				file.moveToTrash()
 				self.recycle_path = file.fileName()
 
-				# renaming the folder/file
+				# -> renaming the folder/file
 				self.original_name = index_fileinfo.absoluteFilePath()
 				os.rename(self.original_name, self.new_file)
 
@@ -218,8 +184,6 @@ class unRenamePopup(QUndoCommand):
 				
 				self.converted.append([index_fileinfo.absoluteFilePath(), proofed_name])
 				os.rename(index_fileinfo.absoluteFilePath(), proofed_name)
-
-		# os.rename(fileIn.absoluteFilePath(), new_file)
 	
 	def undo(self):
 		if self.one_file:
@@ -248,46 +212,14 @@ class unDeleteFilePopup(QUndoCommand):
 		for index_fileinfo in self.index_list:
 			path_to_delete = index_fileinfo.absoluteFilePath()
 			print(f"deleting ... {path_to_delete}")
-			# shutil.move(path_to_delete, recycle_bin)
-			# path_to_delete = path_to_delete.replace("/", "\\")
 
-			# deleteF(path_to_delete)
 			file = QFile(path_to_delete)
 			file.moveToTrash()
 			recyclebin_path = file.fileName()
 			
 			self.converted.append([recyclebin_path, path_to_delete])
-
-		# if self.one_file:
-		# 	for index_fileinfo in self.index_list:
-		# 		file = QFile(self.new_file)
-		# 		self.restore_path = file.fileName()
-
-		# 		dele = file.moveToTrash()
-		# 		# print(dele)
-		# 		self.recycle_path = file.fileName()
-
-		# 		# renaming the folder/file
-		# 		self.original_name = index_fileinfo.absoluteFilePath()
-		# 		os.rename(self.original_name, self.new_file)
-
-		# elif not self.one_file:
-		# 	for index_fileinfo in self.index_list:
-		# 		new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file
-		# 		proofed_name = multiCopyHandler(new_path)
-				
-		# 		self.converted.append([index_fileinfo.absoluteFilePath(), proofed_name])
-		# 		os.rename(index_fileinfo.absoluteFilePath(), proofed_name)
 	
 	def undo(self):
-		# if self.one_file:
-		# 	shutil.move(self.recycle_path, self.restore_path)
-
-		# 	os.rename(self.new_file, self.original_name)
-
-		# elif not self.one_file:
-		# 	for item in range(len(self.index_list)):
-		# 		os.rename(self.converted[item][1], self.converted[item][0])
 		for item in range(len(self.converted)):
 			os.rename(self.converted[item][0], self.converted[item][1])
 		
@@ -301,13 +233,8 @@ class unRemoveOuterFolderPopup(QUndoCommand):
 		self.converted = {}
 	
 	def redo(self):
-		# creating folder
+		# -> creating folder
 		print('redoing')
-		# root = 
-		# for filename in os.path.listdir(os.path.join(root, 'slave')):
-		# 	shutil.move(os.path.join(root, 'slave', filename), os.path.join(root, filename))
-		# os.rmdir(root)
-
 		for index_fileinfo in self.index_list:
 			selected_dir = Path(index_fileinfo.absolutePath())
 			selected_dir_str = str(selected_dir)
@@ -340,14 +267,7 @@ class unRemoveOuterFolderPopup(QUndoCommand):
 			self.recycle_path = file.fileName()
 
 	def undo(self):
-
 		# creating the folders
-
-		# moving files
-		# src_path = self.new_folder
-		# trg_path = self.original_folder
-
-		# counter = 0
 		for item in self.converted:
 			# recovering the folder
 			shutil.move(self.recycle_path, item)
@@ -360,7 +280,6 @@ class unRemoveOuterFolderPopup(QUndoCommand):
 				beforeChangedName = self.converted[item][counter]["beforeChangedName"]
 
 				if isNameChanged:
-					# do something
 					shutil.move(destination, beforeChangedName)
 				
 				shutil.move(destination, file)
@@ -375,24 +294,11 @@ class unDuplicateFolderPopup(QUndoCommand):
 	def redo(self):
 
 		for index_fileinfo in self.index_list:
-			# fileIn: QFileInfo = self.model.fileInfo(index_fileinfo)
-
 			selected_file = index_fileinfo.absoluteFilePath()
 			selected_file_obj = Path(selected_file)
 			new_folder = multiCopyHandler(selected_file)
 			
 			file = Path(new_folder)
-
-			# if not file.exists():
-				# os.mkdir(new_folder)
-
-			# if not os.path.exists(new_folder):  # you can diable this if statement but try to catch an error
-				# os.mkdir(new_folder)
-
-			# note convert this to a redo method and just get tje new folder value and delete it
-			# note incase cancel was clicked, don't remove its folder and just move the files;
-			# file_to_rename = fileIn.absoluteFilePath()
-			# print(file_to_rename)
 			
 			if selected_file_obj.is_dir():
 				shutil.copytree(selected_file, new_folder)
@@ -442,20 +348,14 @@ class unMoveToRootPopup(QUndoCommand):
 			self.file_data_list.append(file_data)
 	
 	def undo(self):
-		# moving files
-		# counter = 0
 		for item in self.file_data_list:
-			# recovering the folder
-			# shutil.move(self.recycle_path, item)
 			
-			# for item1 in range(len(self.converted[item])):
 			file = item["file"]
 			destination = item["destination"]
 			isNameChanged = item["isNameChanged"]
 			beforeChangedName = item["beforeChangedName"]
 
 			if isNameChanged:
-				# do something
 				shutil.move(destination, beforeChangedName)
 			
 			shutil.move(destination, file)
