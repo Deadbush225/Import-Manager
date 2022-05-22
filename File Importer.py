@@ -69,299 +69,6 @@ thumbnail          = r"D:/Student - Files/Eliazar/thumbnail"
 # left_main_dirpath  = r"D:/Student - Files/Eliazar/Project Files"
 # right_main_dirpath = r"D:/Student - Files/Eliazar/Random Raw Files"
 
-class unCreateFolderPopup(QUndoCommand):
-	def __init__(self, newfolder, override=False):
-		super().__init__()
-		self.new_folder = newfolder
-		self.override = override
-
-	def redo(self):
-		print('redoing')
-		if self.override:
-
-			# -> deleting folder
-			file = QFile(self.new_folder)
-			self.restore_path = file.fileName()
-
-			file.moveToTrash()
-			self.recycle_path = file.fileName()
-
-			# -> creating folder
-			os.mkdir(self.new_folder)
-			return
-
-		os.mkdir(self.new_folder)
-	
-	def undo(self):
-		print('undoing')
-		if self.override:
-			shutil.move(self.recycle_path, self.restore_path)
-		
-		QFile(self.new_folder).moveToTrash()
-
-class unMoveToNewFolderPopup(QUndoCommand):
-	def __init__(self, newfolder, index_list, model, override=False):
-		super().__init__()
-		self.model = model
-		self.index_list = index_list
-		self.override = override
-		self.new_folder = newfolder
-	
-	def redo(self):
-		# -> creating folder
-		print('redoing')
-		if self.override:
-			# -> deleting folder
-			file = QFile(self.new_folder)
-			self.restore_path = file.fileName()
-
-			file.moveToTrash()
-			self.recycle_path = file.fileName()
-
-			# -> creating folder
-			os.mkdir(self.new_folder)
-		else:
-			os.mkdir(self.new_folder)
-
-		# -> moving files
-		for index_fileinfo in self.index_list:
-			self.original_folder = index_fileinfo.canonicalPath()
-
-			#warning: make sure that the folder will actually make the folder inside
-			if (index_fileinfo.canonicalPath() == self.model.rootPath()) or (self.model.rootPath() in index_fileinfo.canonicalPath()):  #warning: checking if the files are in the same of the rootfolder
-				file_to_rename = index_fileinfo.canonicalFilePath()
-				print(file_to_rename)
-				shutil.move(file_to_rename, self.new_folder)
-	
-	def undo(self):
-		# -> moving files
-		src_path = self.new_folder
-		trg_path = self.original_folder
-
-		for src_file in Path(src_path).glob('*.*'):
-			shutil.move(src_file, trg_path)
-
-		# -> delete the folder
-		print('undoing')
-		if self.override:
-			shutil.move(self.recycle_path, self.restore_path)
-		
-		QFile(self.new_folder).moveToTrash()
-
-class unRenamePopup(QUndoCommand):
-	def __init__(self, newfolder, index_list: list, onefile=False):
-		"""_summary_
-
-		Args:
-			newfolder (str): the text inputed in the popup
-			index_list (list): _description_
-			onefile (bool, optional): set to true if there's only 1 file selected. Defaults to False.
-		"""		
-		super().__init__()
-		self.new_file = newfolder
-		self.one_file = onefile
-		self.index_list = index_list
-		self.converted = []
-
-	def redo(self):
-		if self.one_file:
-			for index_fileinfo in self.index_list:
-				# -> removing the folder/file
-				file = QFile(self.new_file)
-				self.restore_path = file.fileName()
-
-				file.moveToTrash()
-				self.recycle_path = file.fileName()
-
-				# -> renaming the folder/file
-				self.original_name = index_fileinfo.absoluteFilePath()
-				os.rename(self.original_name, self.new_file)
-
-		elif not self.one_file:
-			for index_fileinfo in self.index_list:
-				new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file
-				proofed_name = multiCopyHandler(new_path)
-				
-				self.converted.append([index_fileinfo.absoluteFilePath(), proofed_name])
-				os.rename(index_fileinfo.absoluteFilePath(), proofed_name)
-	
-	def undo(self):
-		if self.one_file:
-			shutil.move(self.recycle_path, self.restore_path)
-
-			os.rename(self.new_file, self.original_name)
-
-		elif not self.one_file:
-			for item in range(len(self.index_list)):
-				os.rename(self.converted[item][1], self.converted[item][0])
-
-class unDeleteFilePopup(QUndoCommand):
-	def __init__(self, index_list: list):
-		"""_summary_
-
-		Args:
-			newfolder (str): the text inputed in the popup
-			index_list (list): _description_
-			onefile (bool, optional): set to true if there's only 1 file selected. Defaults to False.
-		"""		
-		super().__init__()
-		self.index_list = index_list
-		self.converted = []
-
-	def redo(self):
-		for index_fileinfo in self.index_list:
-			path_to_delete = index_fileinfo.absoluteFilePath()
-			print(f"deleting ... {path_to_delete}")
-
-			file = QFile(path_to_delete)
-			file.moveToTrash()
-			recyclebin_path = file.fileName()
-			
-			self.converted.append([recyclebin_path, path_to_delete])
-	
-	def undo(self):
-		for item in range(len(self.converted)):
-			os.rename(self.converted[item][0], self.converted[item][1])
-		
-		self.converted = []
-
-class unRemoveOuterFolderPopup(QUndoCommand):
-	def __init__(self, index_list, override=False):
-		super().__init__()
-		self.index_list = index_list
-		self.override = override
-		self.converted = {}
-	
-	def redo(self):
-		# -> creating folder
-		print('redoing')
-		for index_fileinfo in self.index_list:
-			selected_dir = Path(index_fileinfo.absolutePath())
-			selected_dir_str = str(selected_dir)
-			parent_dir = selected_dir.parents[0]
-
-			file_data_list = []
-			for file in selected_dir.iterdir():
-				isNameChanged = False
-				beforeNameChanged = None
-
-				# if os.path.exists(file):
-				transfer_file_name = parent_dir / file.name
-				if transfer_file_name.exists():
-					isNameChanged = True
-					beforeNameChanged = file
-
-					transfer_file_name = multiCopyHandler(transfer_file_name)
-
-				shutil.move(file, transfer_file_name)
-
-				file_data = {"file": file, 
-							"destination": transfer_file_name, 
-							"isNameChanged": isNameChanged, 
-							"beforeChangedName": beforeNameChanged}
-				file_data_list.append(file_data)
-			self.converted[selected_dir_str] = file_data_list
-
-			file = QFile(selected_dir_str)
-			file.moveToTrash()
-			self.recycle_path = file.fileName()
-
-	def undo(self):
-		# creating the folders
-		for item in self.converted:
-			# recovering the folder
-			shutil.move(self.recycle_path, item)
-			
-			counter = 0
-			for item1 in range(len(self.converted[item])):
-				file = self.converted[item][counter]["file"]
-				destination = self.converted[item][counter]["destination"]
-				isNameChanged = self.converted[item][counter]["isNameChanged"]
-				beforeChangedName = self.converted[item][counter]["beforeChangedName"]
-
-				if isNameChanged:
-					shutil.move(destination, beforeChangedName)
-				
-				shutil.move(destination, file)
-				counter += 1
-
-class unDuplicateFolderPopup(QUndoCommand):
-	def __init__(self, index_list):
-		super().__init__()
-		self.index_list = index_list
-		self.duplicated = []
-	
-	def redo(self):
-
-		for index_fileinfo in self.index_list:
-			selected_file = index_fileinfo.absoluteFilePath()
-			selected_file_obj = Path(selected_file)
-			new_folder = multiCopyHandler(selected_file)
-			
-			file = Path(new_folder)
-			
-			if selected_file_obj.is_dir():
-				shutil.copytree(selected_file, new_folder)
-			elif selected_file_obj.is_file():
-				shutil.copyfile(selected_file, new_folder)
-			
-			self.duplicated.append(new_folder)
-	
-	def undo(self):
-		
-		for item in self.duplicated:
-			file = QFile(item)
-			file.moveToTrash()
-		
-		self.duplicated = []
-
-class unMoveToRootPopup(QUndoCommand):
-	file_data_list = []
-	
-	def __init__(self, index_list, root_path,override=False):
-		super().__init__()
-		self.index_list = index_list
-		self.root_path = root_path
-		self.override = override
-	
-	def redo(self):
-		for index_fileinfo in self.index_list:
-			file_name = index_fileinfo.absoluteFilePath()
-			file = Path(file_name)
-
-			isNameChanged = False
-			beforeNameChanged = None
-
-			transfer_file_name = Path(self.root_path, file.name)
-			if transfer_file_name.exists():
-				isNameChanged = True
-				beforeNameChanged = file
-
-				transfer_file_name = multiCopyHandler(transfer_file_name)
-
-			shutil.move(file, transfer_file_name)
-
-			file_data = {"file": file, 
-							"destination": transfer_file_name, 
-							"isNameChanged": isNameChanged, 
-							"beforeChangedName": beforeNameChanged}
-			self.file_data_list.append(file_data)
-	
-	def undo(self):
-		for item in self.file_data_list:
-			
-			file = item["file"]
-			destination = item["destination"]
-			isNameChanged = item["isNameChanged"]
-			beforeChangedName = item["beforeChangedName"]
-
-			if isNameChanged:
-				shutil.move(destination, beforeChangedName)
-			
-			shutil.move(destination, file)
-		
-		self.file_data_list = []
-
 class Tree(QTreeView):
 	global project_filenames
 	global preview_types
@@ -396,6 +103,57 @@ class Tree(QTreeView):
 
 		# self.resizeColumnToContents(0)
 		self.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+
+		self.renameAction = QAction('Rename', self)
+		self.renameAction.setShortcutVisibleInContextMenu(True)
+		self.renameAction.setShortcut(QKeySequence(Qt.Key_F2))
+		self.renameAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.renameAction.triggered.connect(lambda event: self.renameFileFolder(event))
+
+		self.deleteFileAction = QAction('Delete', self)
+		self.deleteFileAction.setShortcutVisibleInContextMenu(True)
+		self.deleteFileAction.setShortcut(QKeySequence(Qt.Key_Delete))
+		self.deleteFileAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.deleteFileAction.triggered.connect(lambda event: self.deleteFile(event))
+		
+		self.removeOuterFolderAction = QAction('Delete Outer Folder', self)
+		self.removeOuterFolderAction.setShortcutVisibleInContextMenu(True)
+		self.removeOuterFolderAction.setShortcut(QKeySequence(Qt.SHIFT + Qt.Key_Delete))
+		self.removeOuterFolderAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.removeOuterFolderAction.triggered.connect(lambda event: self.removeOuterFolderPopup(event))
+
+		self.moveToNewFolderAction = QAction('Move to New Folder', self)
+		self.moveToNewFolderAction.setShortcutVisibleInContextMenu(True)
+		self.moveToNewFolderAction.setShortcut(QKeySequence(Qt.ALT + Qt.SHIFT + Qt.Key_N))
+		# self.moveToNewFolderAction.setShortcut(QKeySequence("Alt+Shift+N"))
+		self.moveToNewFolderAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.moveToNewFolderAction.triggered.connect(lambda event: self.MovetoNewFolderPopup(event))
+
+		self.createFolderAction = QAction('Create Folder', self)
+		self.createFolderAction.setShortcutVisibleInContextMenu(True)
+		self.createFolderAction.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_N))
+		self.createFolderAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.createFolderAction.triggered.connect(lambda event: self.createFolderPopup(event))
+		
+		self.duplicateFileFolderAction = QAction('Duplicate', self)
+		self.duplicateFileFolderAction.setShortcutVisibleInContextMenu(True)
+		self.duplicateFileFolderAction.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_J))
+		self.duplicateFileFolderAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.duplicateFileFolderAction.triggered.connect(lambda event: self.duplicateFolderPopup(event))
+
+		self.moveToRootAction = QAction('Move to Root', self)
+		self.moveToRootAction.setShortcutVisibleInContextMenu(True)
+		self.moveToRootAction.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_Up))
+		self.moveToRootAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.moveToRootAction.triggered.connect(lambda event: self.moveToRootPopUp(event))
+
+		self.addAction(self.renameAction)
+		self.addAction(self.deleteFileAction)
+		self.addAction(self.duplicateFileFolderAction)
+		self.addAction(self.moveToRootAction)
+		self.addAction(self.removeOuterFolderAction)
+		self.addAction(self.moveToNewFolderAction)
+		self.addAction(self.createFolderAction)
 
 	def keyPressEvent(self, event):
 		if event.key() == (Qt.Key_Control and Qt.Key_Y):
@@ -596,35 +354,16 @@ class Tree(QTreeView):
 
 		self.menu = QMenu(self)
 
-		renameAction = QAction('Rename', self)
-		renameAction.triggered.connect(lambda event: self.renameFileFolder(event))
+		# self.addAction(renameAction)
 
-		deleteFileAction = QAction('Delete', self)
-		deleteFileAction.triggered.connect(lambda event: self.deleteFile(event))
-		
-		removeOuterFolderAction = QAction('Delete Outer Folder', self)
-		removeOuterFolderAction.triggered.connect(lambda event: self.removeOuterFolderPopup(event))
-
-		moveToNewFolderAction = QAction('Move to New Folder', self)
-		moveToNewFolderAction.triggered.connect(lambda event: self.MovetoNewFolderPopup(event))
-
-		createFolderAction = QAction('Create Folder', self)
-		createFolderAction.triggered.connect(lambda event: self.createFolderPopup(event))
-		
-		duplicateFileFolderAction = QAction('Duplicate', self)
-		duplicateFileFolderAction.triggered.connect(lambda event: self.duplicateFolderPopup(event))
-
-		moveToRootAction = QAction('Move to Root', self)
-		moveToRootAction.triggered.connect(lambda event: self.moveToRootPopUp(event))
-
-		self.menu.addAction(renameAction)
-		self.menu.addAction(deleteFileAction)
-		self.menu.addAction(duplicateFileFolderAction)
-		self.menu.addAction(moveToRootAction)
-		self.menu.addAction(removeOuterFolderAction)
+		self.menu.addAction(self.renameAction)
+		self.menu.addAction(self.deleteFileAction)
+		self.menu.addAction(self.duplicateFileFolderAction)
+		self.menu.addAction(self.moveToRootAction)
+		self.menu.addAction(self.removeOuterFolderAction)
 		self.menu.addSeparator()
-		self.menu.addAction(moveToNewFolderAction)
-		self.menu.addAction(createFolderAction)
+		self.menu.addAction(self.moveToNewFolderAction)
+		self.menu.addAction(self.createFolderAction)
 
 		self.modifier_pressed = qApp.queryKeyboardModifiers()
 		if self.modifier_pressed == Qt.ShiftModifier:
@@ -747,6 +486,7 @@ class Tree(QTreeView):
 								self.undostack.push(unCreateFolder)
 
 	def renameFileFolder(self, event):
+		print("renaming")
 		# note if selected is empty then do nothing
 		# note if only one is selected propmt the override
 		# then if multiple is selected just take a way around the renaming
@@ -1072,6 +812,8 @@ class FileSystemView(QWidget):
 	global workstation_files
 	global thumbnail
 
+	userlist = [""]
+
 	def __init__(self):
 		super().__init__()
 
@@ -1178,6 +920,10 @@ class FileSystemView(QWidget):
 		
 		# dir_path = r'D:/Student - Files/Eliazar'
 
+		# -- workstation -- #
+		if not os.path.exists(workstation_files):
+			os.mkdir(workstation_files)
+
 		# -- recycle bin -- #
 		# if not os.path.exists(recycle_bin):
 		# 	os.mkdir(recycle_bin)
@@ -1251,7 +997,7 @@ class FileSystemView(QWidget):
 		self.tree_layout.addWidget(self.tree2)
 		self.tree_layout.addWidget(self.connected_file_preview)
 
-		button_layout = QVBoxLayout()
+		button_layout = QHBoxLayout()
 		
 		btn_show = QPushButton("Hide Preview")
 		btn_show.clicked.connect(self.showList)
@@ -1260,6 +1006,13 @@ class FileSystemView(QWidget):
 		btn_hide = QPushButton("Enable Hide")
 		btn_hide.clicked.connect(self.enableHide)
 		button_layout.addWidget(btn_hide)
+
+		userlist_comboBox = QComboBox(self)
+		for user in self.userlist:
+			user_path = Path(workstation_files, user)
+			if not user_path.exists():
+				os.mkdir(user_path)
+			userlist_comboBox.addItem(user) # note you can also set an icon
 
 		self.main_layout.addLayout(button_layout)
 		self.main_layout.addLayout(self.tree_layout)
