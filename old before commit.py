@@ -387,7 +387,7 @@ class Tree(QTreeView):
 			index_list = self.selectedIndexes()
 
 			if self.modifier_pressed != Qt.ShiftModifier:
-				new_folder = model.rootPath() + QDir.separator() + popup.folder_name  # note not root path()
+				new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
 				
 				if not os.path.exists(new_folder):
 					# os.mkdir(new_folder)
@@ -440,7 +440,7 @@ class Tree(QTreeView):
 					if index.column() == 0:
 						fileIn = model.fileInfo(index)
 						if fileIn.isDir():
-							new_folder = fileIn.absoluteFilePath() + QDir.separator() + popup.folder_name
+							new_folder = fileIn.absoluteFilePath() + QDir.separator() + popup.text
 
 							if not os.path.exists(new_folder):
 								# os.mkdir(new_folder)
@@ -499,12 +499,12 @@ class Tree(QTreeView):
 
 			index_list = self.selectedIndexes()
 
-			print(f"Folder Name -> '{popup.folder_name}'")
+			print(f"Folder Name -> '{popup.text}'")
 			for index in index_list:
 				if index.column() == 0:
 					fileIn = model.fileInfo(index)
 					# new_file = os.path.join(model.rootPath(), popup.folder_name)  # note not root path()
-					new_file = model.rootPath() + QDir.separator() + popup.folder_name  # note not root path()
+					new_file = model.rootPath() + QDir.separator() + popup.text  # note not root path()
 					
 					if not os.path.exists(new_file):
 						# -> just move the folder/files
@@ -566,10 +566,10 @@ class Tree(QTreeView):
 
 			index_list = self.selectedIndexes()
 
-			print(f"Folder Name -> '{popup.folder_name}'")
+			print(f"Folder Name -> '{popup.text}'")
 			if index_list:
 				if self.modifier_pressed != Qt.ShiftModifier:
-					new_folder = model.rootPath() + QDir.separator() + popup.folder_name  # note not root path()
+					new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
 					
 					if not os.path.exists(new_folder):
 						os.mkdir(new_folder)
@@ -625,7 +625,7 @@ class Tree(QTreeView):
 				elif self.modifier_pressed == Qt.ShiftModifier:
 					print("[MovetoNewFolderPopup] -> Shift Mode")
 					fileIn = model.fileInfo(index_list[0])
-					new_folder = fileIn.absolutePath() + QDir.separator() + popup.folder_name  # note not root path()
+					new_folder = fileIn.absolutePath() + QDir.separator() + popup.text  # note not root path()
 					
 					if not os.path.exists(new_folder):
 						os.mkdir(new_folder)
