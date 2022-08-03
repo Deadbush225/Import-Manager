@@ -289,7 +289,7 @@ class unDuplicateFolderPopup(QUndoCommand):
 class unMoveToRootPopup(QUndoCommand):
 	file_data_list = []
 	
-	def __init__(self, index_list, root_path,override=False):
+	def __init__(self, index_list, root_path, override=False):
 		super().__init__()
 		self.index_list = index_list
 		self.root_path = root_path
@@ -1237,14 +1237,20 @@ class Tree(QTreeView):
 		unMoveToRoot = unMoveToRootPopup(index_list, model.rootPath(),override=False)
 		self.undostack.push(unMoveToRoot)
 
-
-
 class FileSystemModel(QFileSystemModel):
 	hideMode = False
 	conNameFilters = []
 	def hasChildren(self, parent):
-		file_info = self.fileInfo(parent)
-		_dir = QDir(file_info.absoluteFilePath())
+		# file_info = self.fileInfo(parent)
+		# _dir = QDir(file_info.absoluteFilePath())
+
+		# flags = [1, 1024, 2, 4, 8, 8192, 16384, 16, 32, 64, 128, 256, 512, 2048]
+
+		# flgs = self.filter()
+
+		# print([flag if flgs & flag == 0 else None for flag in flags])
+
+		_dir = QDir(self.filePath(parent))
 		return bool(_dir.entryList(self.filter()))
 
 class DisDelegate(QStyledItemDelegate):
@@ -1265,6 +1271,10 @@ class DisDelegate(QStyledItemDelegate):
 			# return 0
 			pass
 
+		
+		qdir = model.filePath(index)
+		# print(f"{row} - {qdir}")
+
 		# Disable even rows, enable odd rows
 		# if index.row() % 2 == 0:
 		#     return Qt.NoItemFlags
@@ -1272,9 +1282,14 @@ class DisDelegate(QStyledItemDelegate):
 		#     return Qt.ItemIsEnabled
 		if model.isDir(index):
 			qdir = QDir(model.filePath(index))
-			if model.conNameFilters:
-				qdir.setNameFilters(model.conNameFilters)
-			if bool(qdir.entryInfoList(qdir.NoDotAndDotDot|qdir.AllEntries|qdir.AllDirs)):
+			# if model.conNameFilters:
+			# 	qdir.setNameFilters(model.conNameFilters)
+			qdir.setNameFilters(model.nameFilters())
+
+			# bl = qdir.entryList(qdir.NoDotAndDotDot|qdir.AllEntries|qdir.AllDirs)
+			bl = qdir.entryList(qdir.NoDotAndDotDot|qdir.AllEntries)
+
+			if bool(bl):
 				pass
 				# return model.enabled
 			else:
@@ -1284,13 +1299,20 @@ class DisDelegate(QStyledItemDelegate):
 				option.palette.setBrush(QPalette.Text, QColor("#9a9a9a"))
 				# option.backgroundBrush = QColor("red")
 				# option.backgroundBrush = QColor("#eeeeee")
-
 		else:  # <- index refers to a file
-			if index.column != 0:
-				return
-			qdir = QDir(model.filePath(index))
+			# s = f"filters: {model.nameFilters()}, filename: {model.fileName(index)}"
 
-			if qdir.match(model.conNameFilters, model.fileName(index)):
+			# looks like the color in the column 0, will be the colum of the row
+			if index.column() != 0:
+				return
+
+			qdir = QDir(model.fileName(index))
+
+			# c = qdir.match(model.conNameFilters, model.fileName(index))
+			c = qdir.match(model.nameFilters(), model.fileName(index))
+			# print(f"{c} - {qdir}")
+
+			if c:
 				# return model.enabled
 				pass
 			else:

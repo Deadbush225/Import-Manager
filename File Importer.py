@@ -881,7 +881,7 @@ class FileSystemView(QWidget):
 		# self.model = FileSystemModel()
 		self.model = FileSystemModel()
 		self.model.setRootPath(self.workstation_files)
-		# self.model.setNameFilters(project_filenames_as_filter) # causes problems in the model file selection
+		self.model.setNameFilters(self.project_filenames_as_filter) # causes problems in the model file selection
 		self.model.conNameFilters = self.project_filenames_as_filter        # self.dirProxy.dirModel.setNameFilterDisables(False)
 
 		# self.dirProxy.dirModel.setFilter(QDir.Files | QDir.NoDotAndDotDot)
