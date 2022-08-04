@@ -1,3 +1,9 @@
+# -> todo
+# / make default at the first index
+# / mark button of the default
+# / reload to the default workstation
+# new button to popup a new Import Manager
+
 import sys
 import os
 import copy
@@ -290,6 +296,7 @@ class ModSettings(QSettings):
 
 # only delete is on tha cotextmenu
 class ModTableWidget(QTableWidget):
+	txtBeforeDblClick = None
 	def __init__(self, row, column, parent=None):
 		super().__init__(row, column, parent)
 		self._parent = parent
@@ -333,8 +340,8 @@ class ModTableWidget(QTableWidget):
 		# self.deleteItemAction.triggered.connect(lambda event: self.deleteItem(event))
 	# def delete_row(self, row):
 
-	def addItem(self, alias, path):
-		last_row_index = self.rowCount()
+	def addItem(self, alias, path, checked=False, row=-1):
+		last_row_index = self.rowCount() if row == -1 else row
 		self.insertRow(last_row_index)
 
 		folder_alias_item = QTableWidgetItem()
@@ -358,6 +365,7 @@ class ModTableWidget(QTableWidget):
 		is_default_btn.setMaximumWidth(30)
 		is_default_btn.setFlat(True)
 		is_default_btn.setCheckable(True)
+		is_default_btn.setChecked(checked)
 		is_default_btn.clicked.connect(self._parent.set_as_default)
 		# layout.addWidget(is_default_btn)
 
@@ -376,7 +384,6 @@ class ModTableWidget(QTableWidget):
 		self.is_default_group.addButton(is_default_btn)
 		self.setCellWidget(last_row_index, 2, is_default_btn)
 
-		
 		# self.model().setData(self.model().index(last_row_index, 2), Qt.AlignCenter, Qt.TextAlignmentRole)
 
 	def get_updated_workstations_list(self) -> list:
@@ -404,7 +411,7 @@ class ModTableWidget(QTableWidget):
 			self.txtBeforeDblClick = item.text()
 	
 	def _itemChanged(self, item):
-		if item.column() == 0: # alias column
+		if item.column() == 0 and self.txtBeforeDblClick: # alias column
 			text = item.text()
 
 			alias_list = self.get_updated_workstations_alias_list()
@@ -497,8 +504,8 @@ class AdditionalSettings(QDialog):
 		save_settings.setIconSize(QSize(15, 15))
 		save_settings.clicked.connect(self.save_settings)
 
-		self.statusBar = QStatusBar()
-		self.statusBar.setSizeGripEnabled(False)
+		self.statusbar = QStatusBar()
+		self.statusbar.setSizeGripEnabled(False)
 
 		main_layout.addWidget(self.enable_hide_Chkbx)
 		main_layout.addWidget(self.hide_preview_Chkbx)
@@ -508,7 +515,7 @@ class AdditionalSettings(QDialog):
 		# main_layout.addWidget(add_folder_btn)
 		main_layout.addWidget(horizontal_line2)
 		main_layout.addWidget(save_settings)
-		main_layout.addWidget(self.statusBar)
+		main_layout.addWidget(self.statusbar)
 
 		self.setLayout(main_layout)
 
@@ -519,7 +526,10 @@ class AdditionalSettings(QDialog):
 			alias = alias_path[0]
 			path = alias_path[1]
 
-			self.addPathItem_custom(alias, path)
+			if alias == self.temp_settings["Workstation Paths"]["Workstations"][0][0]:
+				self.addPathItem_custom(alias, path, checked = True)
+			else:
+				self.addPathItem_custom(alias, path)
 
 	def get_selected_rows(self) -> list:
 		selected_rows = self.pathtable.selectionModel().selectedRows(0)
@@ -545,15 +555,37 @@ class AdditionalSettings(QDialog):
 		# 		case QMessageBox.Cancel:
 		# 			return
 
-		path_item = self.pathtable.item(selected_rows[-1], 1)
-		alias_item = self.pathtable.item(selected_rows[-1], 0)
+		selected_rows_first_item = selected_rows[-1]
+
+		path_item = self.pathtable.item(selected_rows_first_item, 1)
+		alias_item = self.pathtable.item(selected_rows_first_item, 0)
 
 		selected_path = path_item.text()
 		selected_alias = alias_item.text()
 		
-		self.temp_settings["Workstation Paths"]["Default Workstation"] = [selected_path, selected_alias]
+		# -> no need to move the item inside the list of workstations
+		# workstation_list: list = self.temp_settings["Workstation Paths"]["Workstations"]
+		# workstation_list.insert(0, workstation_list.pop(selected_rows_first_item))
+
+		self.pathtable.addItem(selected_alias, selected_path, checked = True, row = 0)
+		self.pathtable.removeRow(selected_rows_first_item + 1)
+
+
+		# -> move default row top #problem table only allows 1 instance of child cellWidget
+		# if selected_rows_first_item > 0:
+		# 	self.pathtable.insertRow(0)
+		# 	for col in range(self.pathtable.columnCount()-1):
+		# 		self.pathtable.setItem(0, col, self.pathtable.takeItem(selected_rows_first_item + 1, col))
+			
+		# 	self.pathtable.setCellWidget(0, 2, self.pathtable.cellWidget(selected_rows_first_item, 2))
+
+		# 	self.pathtable.removeRow(selected_rows_first_item + 1)
+
+		# self.temp_settings["Workstation Paths"]["Workstations"] = workstation_list
+
+		# self.temp_settings["Workstation Paths"]["Default Workstation"] = [selected_path, selected_alias]
 		# if selected_path != self.temp_settings.value('Workstation Paths/Default Workstation'):
-		print(f"text: {selected_path}, settings: {self.temp_settings['Workstation Paths']['Default Workstation']}")
+		# print(f"text: {selected_path}, settings: {self.temp_settings['Workstation Paths']['Default Workstation']}")
 
 		self.showMessage(f"Configured \"{selected_alias}\" as default", "COM")
 		# alias_item.setText(f"(Default) {selected_alias}")
@@ -592,8 +624,8 @@ class AdditionalSettings(QDialog):
 		
 		self.showMessage(f"Unlocked rows {selected_rows}", "COM")
 
-	def addPathItem_custom(self, alias, path):
-		self.pathtable.addItem(alias, path)
+	def addPathItem_custom(self, alias, path, checked=False):
+		self.pathtable.addItem(alias, path, checked)
 
 	def addPathItem_browse(self):
 		self.selected_dir = self.browse_folder()
@@ -610,7 +642,7 @@ class AdditionalSettings(QDialog):
 					self.showMessage("New workstation added!")
 
 	def showMessage(self, str_, prefix = "", timeout=3000):
-		self.statusBar.showMessage(prefix + " : " + str_, timeout)
+		self.statusbar.showMessage(prefix + " : " + str_, timeout)
 
 	def browse_folder(self):
 		return QFileDialog.getExistingDirectory(self, "Browse to your Obsidian Vault", "<Dir>")
@@ -841,22 +873,6 @@ class FileSystemView(QWidget):
 		self.setWindowTitle('File System Viewer')
 		# self.setGeometry(200, 100, appWidth, appHeight)
 
-		# self.setMinimumWidth(1000)
-		
-		# dir_path = QFileDialog.getExistingDirectory(self, "Select file folder directory")
-		#* Add Combo box for each person
-		
-		# dir_path = r'D:/Student - Files/Eliazar'
-
-		# -- workstation -- #
-		# not each user will have a workstation
-		# if not os.path.exists(workstation_files):
-		# 	os.mkdir(workstation_files)
-
-		# -- recycle bin -- #
-		# if not os.path.exists(recycle_bin):
-		# 	os.mkdir(recycle_bin)
-
 		# -- thumbnail -- #    #warning:Please disable this when debugging
 		if not os.path.exists(self.thumbnail):   #warning: delete the thumbnail folder when the program is finished
 			os.mkdir(self.thumbnail)
@@ -938,13 +954,8 @@ class FileSystemView(QWidget):
 
 		self.workstationComboBox = QComboBox(self)
 		self.workstationComboBox.currentIndexChanged.connect(self.set_root_path)
-		# workstationComboBox.addItems(self.app_settings.get_list_from_settings(group="Workstation Paths"))
+		
 		self.populate_combobox()
-		# for user in self.userlist:
-		# 	user_path = Path(self.workstation_files, user)
-		# 	if not user_path.exists():
-		# 		os.mkdir(user_path)
-		# 	workstationComboBox.addItem(user) # note you can also set an icon
 		button_layout.addWidget(self.workstationComboBox)
 
 		settings_icon = QIcon(r"Icons\cogwheel.png")
@@ -965,8 +976,6 @@ class FileSystemView(QWidget):
 
 	def populate_combobox(self):
 		self.workstationComboBox.clear()
-		# self.workstationComboBox.addItem(self.app_settings.get_default_workstation()[0])
-		# self.workstationComboBox.addItem(self.app_settings.)
 		self.workstationComboBox.addItems(self.app_settings.get_workstations_aliases())
 
 	def open_additional_settings(self):
