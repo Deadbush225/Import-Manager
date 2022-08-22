@@ -11,14 +11,18 @@ import ctypes
 # import shutil
 import subprocess
 from pathlib import *
+import hashlib
+# from preview_generator.manager import PreviewManager
 # from send2trash import send2trash
 
 # def deleteF(path: str):   # use moveToTrash
 # 	return path.replace("/", "\\")
 
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+# from PyQt5.QtWebEngineWidgets import QWebEnginePage, QWebEngineView
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
+import qdarkstyle
 
 from _subclassed import *
 
@@ -32,6 +36,8 @@ from _subclassed import *
 
 # add dir btn 
 # imperative to enter a alias (try to add name as recommendation) else cancel
+
+PDF_JS = str(Path("./pdfjs-2.15.349-legacy-dist/web/viewer.html").absolute()).replace("\\", "/")
 
 class ModDict():
 	current_group = None
@@ -312,14 +318,14 @@ class ModTableWidget(QTableWidget):
 		# self.horizontalHeader().setDefaultSectionSize(40)
 
 		# self.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
-		self.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents | QHeaderView.Interactive)
-		self.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-		self.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+		self.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents | QHeaderView.ResizeMode.Interactive)
+		self.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+		self.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
 		# self.horizontalHeader().setStretchLastSection(True)
 		self.horizontalHeader().setMinimumSectionSize(30)
 		# self.setColumnWidth(0, 100)
 
-		self.setSelectionBehavior(QAbstractItemView.SelectRows)
+		self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
 		self.is_default_group = QButtonGroup()
 
@@ -346,13 +352,13 @@ class ModTableWidget(QTableWidget):
 
 		folder_alias_item = QTableWidgetItem()
 		folder_alias_item.setText(alias)
-		folder_alias_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+		folder_alias_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
 
 		self.setItem(last_row_index, 0, folder_alias_item)
 
 		folder_path_item = QTableWidgetItem()
 		folder_path_item.setText(path)
-		folder_path_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+		folder_path_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
 
 		self.setItem(last_row_index, 1, folder_path_item)
 
@@ -429,7 +435,7 @@ class ModTableWidget(QTableWidget):
 
 class AdditionalSettings(QDialog):
 
-	save_now = pyqtSignal(ModDict)
+	saving = pyqtSignal(ModDict)
 
 	def __init__(self, parent, parent_settings: ModDict):
 		super().__init__()
@@ -607,7 +613,7 @@ class AdditionalSettings(QDialog):
 				
 				if item is None:
 					continue
-				item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+				item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
 		
 		self.showMessage(f"Locked rows {selected_rows}", "COM")
 				
@@ -620,7 +626,7 @@ class AdditionalSettings(QDialog):
 
 				if item is None:
 					continue
-				item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
+				item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable)
 		
 		self.showMessage(f"Unlocked rows {selected_rows}", "COM")
 
@@ -682,7 +688,7 @@ class AdditionalSettings(QDialog):
 
 		# if self.check_changes():
 		self.parent_settings = self.temp_settings # for check check_changes
-		self.save_now.emit(self.temp_settings)
+		self.saving.emit(self.temp_settings)
 		# self.parent_settings.sync()
 		sync = self.temp_settings.convert_to_settings()
 		print(sync.convert_to_dict())
@@ -694,13 +700,13 @@ class AdditionalSettings(QDialog):
 		if self.check_changes():
 			event.accept()
 		else:
-			confirmation = MessagePopUp("You have unsaved changes", "Do you want to discard all of it?", buttons=QMessageBox.Discard | QMessageBox.Save)
+			confirmation = MessagePopUp("You have unsaved changes", "Do you want to discard all of it?", buttons=QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Save)
 			# ret = confirmation.exec()
 			# print(confirmation.clickedbutton)
 			clickedbutton = confirmation.clickedbutton
-			if clickedbutton == QMessageBox.Save:
+			if clickedbutton == QMessageBox.StandardButton.Save:
 				self.save_settings()
-			elif clickedbutton == QMessageBox.Discard:
+			elif clickedbutton == QMessageBox.StandardButton.Discard:
 				event.accept()
 
 		# return super().closeEvent(event)
@@ -721,8 +727,12 @@ class FileSystemView(QWidget):
 
 		# -- Types -- #
 		self.project_filenames = ["ai","psd"]
-		self.project_filenames_as_filter = ["*.ai","*.psd"]
-		self.preview_types = [".ai", ".psd", ".jpg", ".png"]
+		# self.project_filenames_as_filter = ["*.ai","*.psd"]
+		self.project_filenames_as_filter = ["*." + filter_ for filter_ in self.project_filenames]
+		self.preview_types = [["ai", "psd", "jpg", "png", "bmp", "gif", "svg"],			# images
+							  ["pdf"],													# pdf
+							  ["doc", "docx", "xls", "xlsx", "ppt", "pptx"],			# office files
+							  ["txt", "rtf"]] 											# plain text
 
 		# -- Paths -- #
 		# dir_path           = r'D:\Local Database\Eliazar'
@@ -746,7 +756,10 @@ class FileSystemView(QWidget):
 
 		# workstation_files = r""
 		self.workstation_files = self.app_settings.get_default_workstation()[1]
-		self.thumbnail = self.workstation_files + r"\thumbnail"	
+		self.thumbnail_path = self.workstation_files + r"\thumbnail"
+		# self.set_root_path(0) # for the default	
+
+		# self.manager = PreviewManager('/cache/', create_folder= True)
 
 		self.UI_Init()
 	
@@ -780,6 +793,7 @@ class FileSystemView(QWidget):
 		self.app_settings = self.app_settings.convert_to_dict()
 		print(self.app_settings)
 
+#warning: dpr
 	def handle_buttons(self, toggle_on, toggle_off):
 		button = self.sender()
 		# if button is not None:
@@ -800,51 +814,140 @@ class FileSystemView(QWidget):
 
 		# need to redo to add QFilterProxyModel, to actually add the functionality to hide
 		self.handle_buttons("Disable Hide", "Enable Hide")
+#warning: dpr
 
-	def fileConverter(self, dir):
+	def toPDFConverter(self, dir_of_file) -> QUrl:
+		file_name_ = self.cacheName(dir_of_file, suffix="pdf")
+		print(subprocess.run(["pandoc", dir_of_file, "-o", f"{file_name_}"]))
+		return file_name_
 
-		iterator_ = QDirIterator(dir)
+	def cacheName(self, complete_file_name, suffix=None):
+		# 	project_filenames = [".ai",".psd"]
+		info = QFileInfo(complete_file_name)
+		# fileBaseName = info.completeBaseName()
+		modifiedTime = info.lastModified().toString("dd;MM;yyyy-hh;mm;ss;z")
+		extension = suffix if suffix else info.suffix()
 
-		while iterator_.hasNext():
-			fileIn = QFileInfo(iterator_.next())
+		md5 = hashlib.md5(complete_file_name.encode('utf-8')).hexdigest()
 
-			baseName = fileIn.completeBaseName()
-			fileName = fileIn.fileName()
-			complete_path = fileIn.absoluteFilePath()
-			path = fileIn.absolutePath()
+		# cache_name = f"{md5}-[({page})]-[{density}]-[{modifiedTime}].jpg"
+		cache_name = f"{md5}-[{modifiedTime}].{extension}"
 
-			project_filenames = [".ai",".psd"]
+		output_path = f"{self.thumbnail_path}\\{cache_name}"
 
-			for item in project_filenames:
-				if fileName.endswith(item):
-					print(f"""\"C:/Program Files/ImageMagick-7.1.0-Q8/convert.exe" -density 20x20 "{self.thumbnail}[0]" "{self.thumbnail}/thumbnail/{baseName}.jpg\"""")
-					subprocess.run(f"""\"C:/Program Files/ImageMagick-7.1.0-Q8/convert.exe" -density 20x20 "{self.thumbnail}[0]" "{self.thumbnail}/thumbnail/{baseName}.jpg\"""")
-					print(f"[{complete_path}[0]] --> File Converted --> [{self.thumbnail}/thumbnail/{baseName}.jpg]")
+		return output_path
 
-	def onClicked(self, index, label):
+	def thumbnailConverter(self, dir :str, density :str="50x50") -> str or list:
+
+		# iterator_ = QDirIterator(dir)
+
+		# while iterator_.hasNext():
+		# 	fileIn = QFileInfo(iterator_.next())
+
+		# 	baseName = fileIn.completeBaseName()
+		# 	fileName = fileIn.fileName()
+		# 	complete_path = fileIn.absoluteFilePath()
+		# 	path = fileIn.absolutePath()
+
+		# # 	project_filenames = [".ai",".psd"]
+		# info = QFileInfo(dir)
+		# # fileBaseName = info.completeBaseName()
+		# modifiedTime = info.lastModified().toString("dd;MM;yyyy-hh;mm;ss;z")
+		# # extension = info.suffix()
+
+		# md5 = hashlib.md5(dir.encode('utf-8')).hexdigest()
+
+		# # cache_name = f"{md5}-[({page})]-[{density}]-[{modifiedTime}].jpg"
+		# cache_name = f"{md5}-[{modifiedTime}].jpg"
+
+		# # output_path = f"{self.thumbnail_path}\\{cache_name}"
+
+		output_path = self.cacheName(dir)
+
+		# 	for item in project_filenames:
+		# 		if fileName.endswith(item):
+		# 			print(f"""\"C:/Program Files/ImageMagick-7.1.0-Q8/convert.exe" -density 20x20 "{self.thumbnail}[0]" "{self.thumbnail}/thumbnail/{baseName}.jpg\"""")
+		if not os.path.exists(output_path):
+			# subprocess.run(f"""\"C:/Program Files/ImageMagick-7.1.0-Q8/convert.exe" -density 50x50 "{dir}" {output_path}""")
+	
+			# print(["C:/Program Files/ImageMagick-7.1.0-Q8/convert.exe", "-density", "50x50", f"{dir}", f"{output_path}"])
+			subprocess.run(["C:\\Program Files\\ImageMagick-7.1.0-Q8\\convert.exe", "-density", f"{density}", f"{dir}", f"{output_path}"])
+		# 			print(f"[{complete_path}[0]] --> File Converted --> [{self.thumbnail}/thumbnail/{baseName}.jpg]")
+
+		# thumbnail_path = self.manager.get_jpeg_preview(dir)
+
+		# if "-" in page:
+		# 	ranges = page.split("-")
+		# 	return [f"{md5}-[({page})]-[{density}]-[{modifiedTime}].jpg" for page in range(int(ranges[0]), int(ranges[1]) + 1)]	
+		# return output_path
+		return output_path
+
+#C:\\Users\\Eliaz\\Desktop\\thumbnails\\img20220805_12594061 (2)-006d339542fd08ea162270db925154f2.jpg
+
+	def onClicked(self, index, previewArea :QScrollArea):
 		# note mabe add a scanner when a directory is clicked then display in the bottom bar
 		# produced_path = self.fileConverter(index)
 
-		fileIn = self.sender().model().fileInfo(index)
+		fileIn : QFileInfo = self.sender().model().fileInfo(index)
 		if not fileIn.isDir():
-			complete_path = fileIn.absoluteFilePath()
-			self.sender().fileName = fileIn.fileName()
-			baseName = fileIn.completeBaseName()
+			complete_img_path = fileIn.absoluteFilePath()
+			fileName :str= fileIn.fileName()
+			# baseName = fileIn.completeBaseName()
 		
-			for type in self.preview_types:
-				if self.sender().fileName.endswith(type):
-					if type in self.project_filenames:
-						preview_picture_pixmap = QPixmap(f"{self.thumbnail}/thumbnail/{baseName}.jpg")
-					else:
-						preview_picture_pixmap = QPixmap(complete_path)
+			# for type in self.preview_types:
+			# 	if self.sender().fileName.endswith(type):
+			# 		if type in self.project_filenames:
+			# 			preview_picture_pixmap = QPixmap(f"{self.thumbnail}/thumbnail/{baseName}.jpg")
+			# 		else: # its a picture
+			# 			preview_picture_pixmap = QPixmap(complete_path)
 
-					# preview_picture_pixmap = preview_picture_pixmap.scaledToWidth(self.main_file_preview.width(), Qt.SmoothTransformation)
+			suffix = fileName.rsplit(".")[-1] # no *.
+			
+			# convention 
+			# preview is a QLabel/QLayout that serves as the preview to be added in the scrollArea
 
-					width = label.contentsRect().width()
-					height = label.contentsRect().height()
+			if suffix in self.preview_types[0]:
+				self.preview = ModLabel()
+				preview_picture_pixmap = QPixmap(self.thumbnailConverter(complete_img_path))
+				#try using fast transformation
+				preview_picture_pixmap = preview_picture_pixmap.scaledToWidth(self.main_file_preview.contentsRect().width(), Qt.TransformationMode.SmoothTransformation)
+				self.preview.setPixmap(preview_picture_pixmap)
+			elif suffix in self.preview_types[2]:
+				if fileIn.size() < 8000000: # 8mb max
+					pdf_path = self.toPDFConverter(complete_img_path)
 
-					preview_picture_pixmap = preview_picture_pixmap.scaled(width, height, Qt.KeepAspectRatio)
-					label.setPixmap(preview_picture_pixmap)
+					pdf_url = QUrl(fr"file:///{PDF_JS}?file=file:///{pdf_path}")
+
+					self.preview = ModWebEngineView(previewArea)
+					self.preview.load(pdf_url)
+			elif suffix in self.preview_types[1]:
+				if fileIn.size() < 8000000: # 8mb max
+					pdf_path = QUrl(fr"file:///{PDF_JS}?file=file:///{complete_img_path}")
+
+					# pdf_url = QUrl().fromUserInput(f"file://{PDF_JS}?file=file://{pdf_path}")
+					
+					self.preview = ModWebEngineView(previewArea)
+					self.preview.load(pdf_path)
+				# pages_paths = self.thumbnailConverter(complete_img_path, page = "0-19")
+				
+				# preview = QVBoxLayout()
+				# for page_path in pages_paths:
+				# 	lbl_page = QLabel()
+				# 	page_pixmap = QPixmap(page_path)
+				# 	page_pixmap = page_pixmap.scaledToWidth(self.main_file_preview.contentsRect().width(), Qt.SmoothTransformation)
+				# 	lbl_page.setPixmap(page_pixmap)
+				# 	preview.addWidget(lbl_page)
+					pass
+
+
+
+			# width = label.contentsRect().width()
+			# height = label.contentsRect().height()
+
+			# preview_picture_pixmap = preview_picture_pixmap.scaled(width, height, Qt.KeepAspectRatio)
+			# label.setPixmap(preview_picture_pixmap)
+			previewArea.setWidget(self.preview)
+			# scrollArea.setAlignment(Qt.AlignVCenter)
 		else:
 			return
 		
@@ -852,8 +955,8 @@ class FileSystemView(QWidget):
 		# if index.parent() is self.tree
 		if self.sender().isLeft: # Note these sender() is for setting the attributes of the Tree
 			suffix = fileIn.completeSuffix()
-			if fileIn.completeSuffix() in self.project_filenames:
-				self.sender().project_dir = self.workstation_files + QDir.separator() + self.sender().fileName + " Raw Files"
+			if suffix in self.project_filenames:
+				self.sender().project_dir = self.workstation_files + QDir.separator() + fileName + " Raw Files"
 				print("isleft")
 				if not os.path.exists(self.sender().project_dir):
 					os.mkdir(self.sender().project_dir)
@@ -873,32 +976,39 @@ class FileSystemView(QWidget):
 		self.setWindowTitle('File System Viewer')
 		# self.setGeometry(200, 100, appWidth, appHeight)
 
-		# -- thumbnail -- #    #warning:Please disable this when debugging
-		if not os.path.exists(self.thumbnail):   #warning: delete the thumbnail folder when the program is finished
-			os.mkdir(self.thumbnail)
-			FILE_ATTRIBUTE_HIDDEN = 0x02
-			ctypes.windll.kernel32.SetFileAttributesW(self.thumbnail, FILE_ATTRIBUTE_HIDDEN)
+		# # -- thumbnail -- #    #warning:Please disable this when debugging
+		# if not os.path.exists(self.thumbnail):   #warning: delete the thumbnail folder when the program is finished
+		# 	os.mkdir(self.thumbnail)
+		# 	FILE_ATTRIBUTE_HIDDEN = 0x02
+		# 	ctypes.windll.kernel32.SetFileAttributesW(self.thumbnail, FILE_ATTRIBUTE_HIDDEN)
 
 		# -- preview (left) -- #
-		effect = QGraphicsDropShadowEffect(offset=QPoint(-3, 3), blurRadius=25, color=QColor("#111"))
-		self.main_file_preview = ModifiedQLabel(effect=effect)
-		self.main_file_preview.setHidden(True)
+		set_hide = self.app_settings["General Settings"]["Hide Preview"]
+
+		# effect = QGraphicsDropShadowEffect(offset=QPoint(-3, 3), blurRadius=25, color=QColor("#111"))
+		# self.main_file_preview = ModifiedQLabel(effect=effect)
+		# self.main_file_preview.setHidden(set_hide)
+		self.main_file_preview = ModScrollArea()
+		# self.main_file_preview = QLayout()
 
 		# -- preview (right) -- #
-		effect = QGraphicsDropShadowEffect(offset=QPoint(3, 3), blurRadius=25, color=QColor("#111"))
-		self.connected_file_preview = ModifiedQLabel(effect=effect)
-		self.connected_file_preview.setHidden(True)
+		self.connected_file_preview = ModScrollArea()
+		# self.connected_file_preview = QLayout()
+		# effect = QGraphicsDropShadowEffect(offset=QPoint(3, 3), blurRadius=25, color=QColor("#111"))
+		# self.connected_file_preview = ModifiedQLabel(effect=effect)
+		# self.connected_file_preview.setHidden(set_hide)
 
 		# -- left side pane -- #
-		if not os.path.exists(self.workstation_files):
-			os.mkdir(self.workstation_files)
-			# note intro here because new
+		# if not os.path.exists(self.workstation_files):
+		# 	os.mkdir(self.workstation_files)
+		# 	# note intro here because new
 
 		# self.model = FileSystemModel()
 		self.model = FileSystemModel()
 		self.model.setRootPath(self.workstation_files)
-		self.model.setNameFilters(self.project_filenames_as_filter) # causes problems in the model file selection
-		self.model.conNameFilters = self.project_filenames_as_filter        # self.dirProxy.dirModel.setNameFilterDisables(False)
+		self.model._nameFilters = self.project_filenames_as_filter
+		# self.model.setNameFilters(self.project_filenames_as_filter) 	#-> causes problems in the model file selection
+		# self.model.conNameFilters = self.project_filenames_as_filter  # self.dirProxy.dirModel.setNameFilterDisables(False)
 
 		# self.dirProxy.dirModel.setFilter(QDir.Files | QDir.NoDotAndDotDot)
 
@@ -944,13 +1054,13 @@ class FileSystemView(QWidget):
 
 		button_layout = QHBoxLayout()
 		
-		btn_show = QPushButton("Hide Preview")
-		btn_show.clicked.connect(self.showList)
-		button_layout.addWidget(btn_show)
+		# btn_show = QPushButton("Hide Preview")
+		# btn_show.clicked.connect(self.showList)
+		# button_layout.addWidget(btn_show)
 
-		btn_hide = QPushButton("Enable Hide")
-		btn_hide.clicked.connect(self.enableHide)
-		button_layout.addWidget(btn_hide)
+		# btn_hide = QPushButton("Enable Hide")
+		# btn_hide.clicked.connect(self.enableHide)
+		# button_layout.addWidget(btn_hide)
 
 		self.workstationComboBox = QComboBox(self)
 		self.workstationComboBox.currentIndexChanged.connect(self.set_root_path)
@@ -970,9 +1080,21 @@ class FileSystemView(QWidget):
 		self.setLayout(self.main_layout)
 	
 	def set_root_path(self, index):
+
+		self.currentPath = self.app_settings["Workstation Paths"]["Workstations"][index][1]
+
+		self.model.setRootPath(self.currentPath)
+
 		self.tree.isLeft = True
-		root_index = self.model.index(self.app_settings["Workstation Paths"]["Workstations"][index][1])
+		root_index = self.model.index(self.currentPath)
 		self.tree.setRootIndex(root_index)
+
+		# -- thumbnail -- #    #warning:Please disable this when debugging
+		self.thumbnail_path = os.path.join(self.currentPath, "thumbnails")
+		if not os.path.exists(self.thumbnail_path):   #warning: delete the thumbnail folder when the program is finished
+			os.mkdir(self.thumbnail_path)
+			FILE_ATTRIBUTE_HIDDEN = 0x02
+			ctypes.windll.kernel32.SetFileAttributesW(self.thumbnail_path, FILE_ATTRIBUTE_HIDDEN)
 
 	def populate_combobox(self):
 		self.workstationComboBox.clear()
@@ -980,7 +1102,7 @@ class FileSystemView(QWidget):
 
 	def open_additional_settings(self):
 		self.additional_settings = AdditionalSettings(self, self.app_settings)
-		self.additional_settings.save_now.connect(self.save_settings)
+		self.additional_settings.saving.connect(self.save_settings)
 		self.additional_settings.exec_()
 
 	def save_settings(self, dict_):
@@ -998,8 +1120,9 @@ if __name__ == '__main__':
 	if app is None:
 		app = QApplication(sys.argv)
 	demo = FileSystemView()
+	app.setStyleSheet(qdarkstyle.load_stylesheet())
 	# with open("sty.qss","r") as fh:
 	# 	app.setStyleSheet(fh.read())
 	# demo.showMaximized()
 	demo.show()
-	sys.exit(app.exec_())
+	sys.exit(app.exec())

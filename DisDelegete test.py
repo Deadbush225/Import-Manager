@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 from _subclassed import DisDelegate, FileSystemModel, Tree
 import sys
 
@@ -8,13 +8,14 @@ class Test(QWidget):
 	def __init__(self):
 		super().__init__()
 		self.project_filenames_as_filter = ["*.ai","*.psd"]
-		self.workstation_files = r"C:\Users\Eliaz\Desktop"
+		self.workstation_files = r"C:\Users\Eliaz\Desktop\SandBox"
 
 		self.model = FileSystemModel()
 		self.model.hideMode = True
 		self.model.setRootPath(self.workstation_files)
-		self.model.setNameFilters(self.project_filenames_as_filter)
-		# self.model.setNameFilters(project_filenames_as_filter) # causes problems in the model file selection
+		self.model._nameFilters = self.project_filenames_as_filter
+		# self.model.setNameFilters(self.project_filenames_as_filter)
+		# self.model.setNameFilters(project_filenames_as_filter) #-> causes problems in the model file selection
 		# -> default self.model.conNameFilters = self.project_filenames_as_filter        # self.dirProxy.dirModel.setNameFilterDisables(False)
 
 		# self.dirProxy.dirModel.setFilter(QDir.Files | QDir.NoDotAndDotDot)
@@ -41,6 +42,6 @@ class Test(QWidget):
 		# need to redo to add QFilterProxyModel, to actually add the functionality to hide
 		# self.handle_buttons("Disable Hide", "Enable Hide")
 
-app = QApplication(sys.argv)
+qApp = QApplication(sys.argv)
 ex = Test()
-sys.exit(app.exec_())
+sys.exit(qApp.exec())

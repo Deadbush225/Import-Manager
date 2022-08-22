@@ -1,0 +1,4 @@
+To set to dark theme
+link: https://stackoverflow.com/questions/73390781/properly-switch-to-dark-theme-in-pdf-js-rendered-inside-a-qwebview
+ - override default 'viewerCssTheme' in web\viewer.js
+ - add ::-webkit-scrollbar- in web\viewer.css

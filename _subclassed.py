@@ -1,6 +1,12 @@
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+# -> todo
+# clean tree subclass
+# / fix selection bug in the "disabled items"
+
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings
 import os
 import shutil
 from pathlib import Path, PureWindowsPath
@@ -335,14 +341,14 @@ class unMoveToRootPopup(QUndoCommand):
 
 # -> message popups
 class MessagePopUp(QMessageBox):
-	def __init__(self, text, note, buttons = QMessageBox.Yes | QMessageBox.No):
+	def __init__(self, text, note, buttons = QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No):
 		super().__init__()
-		self.setIcon(QMessageBox.Warning)
+		self.setIcon(QMessageBox.Icon.Warning)
 		self.setWindowTitle("Confirmation")
 		self.setText(f"{text}")
 		self.setInformativeText(f"Note: {note}")
 		self.setStandardButtons(buttons)
-		self.setDefaultButton(QMessageBox.No)
+		self.setDefaultButton(QMessageBox.StandardButton.No)
 
 		# you can also use self.clickedButton() to access
 		self.clickedbutton = self.exec()
@@ -369,7 +375,7 @@ class MessageBoxwLabel(QDialog):
 
 		self.setLayout(self.mainlayout)
 		
-		self.returned = self.exec_()
+		self.returned = self.exec()
 	
 	def click(self):
 		print("here")
@@ -378,21 +384,43 @@ class MessageBoxwLabel(QDialog):
 		# self.close()
 		self.done(1)
 
-class ModifiedQLabel(QLabel):
-	def __init__(self, effect=None):
+class ModScrollArea(QScrollArea):
+	def __init__(self):
 		super().__init__()
+		# self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		# self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+		# self.setWidgetResizable(True)
+		# self.setStyleSheet("border: 1px solid black")
+		self.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+		# self.horizontalScrollBar().setEnabled(False)
+	
+	def setWidgetLayout(self, w: QWidget or QLayout) -> None:
+		if isinstance(w, QWidget):
+			self.setWidget(w)
+		elif isinstance(w, QVBoxLayout):
+			self.setLayout(w)
+
+class ModLabel(QLabel):
+	def __init__(self):
+		super().__init__()
+
+		self.setScaledContents(True)
+
+# class ModifiedQLabel(QLabel):
+# 	def __init__(self, effect=None):
+# 		super().__init__()
 		
-		self.setMinimumWidth(300)
-		self.setMaximumWidth(400)
+# 		self.setMinimumWidth(300)
+# 		self.setMaximumWidth(400)
 
-		# self.setSizePolicy(QSizePolicy.Ma, QSizePolicy.Preferred)
-		self.setSizePolicy(QSizePolicy.Expanding ,QSizePolicy.Expanding)
-		# self.sizeIncrement().setWidth(0)
-		# self.setFixedSize(self.size())
+# 		# self.setSizePolicy(QSizePolicy.Ma, QSizePolicy.Preferred)
+# 		self.setSizePolicy(QSizePolicy.Expanding ,QSizePolicy.Expanding)
+# 		# self.sizeIncrement().setWidth(0)
+# 		# self.setFixedSize(self.size())
 
-		self.setGraphicsEffect(effect)
+# 		self.setGraphicsEffect(effect)
 
-		self.setStyleSheet("border: 1px solid black;")
+# 		self.setStyleSheet("border: 1px solid black;")
 
 # -> extensions
 
@@ -412,12 +440,12 @@ class QHSeparationLine(QFrame):
 		super().__init__()
 		# self.setMinimumWidth(1)
 		self.setFixedHeight(2)
-		self.setFrameShape(QFrame.HLine)
-		self.setFrameShadow(QFrame.Sunken)
-		self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+		self.setFrameShape(QFrame.Shape.HLine)
+		self.setFrameShadow(QFrame.Shadow.Sunken)
+		self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
 # -> models
-# deprecated
+# deprecated (needs to be ported to pyqt6)
 class DirProxy(QSortFilterProxyModel):
 	nameFilters = ''
 	hideMode = False  # false to make it disable instead
@@ -502,6 +530,30 @@ class DirProxy(QSortFilterProxyModel):
 	# -> reimplementation <- #
 # deprecated
 
+class ModWebEngineView(QWebEngineView):
+	def __init__(self, scrollArea):
+		super().__init__()
+		self.scrollArea :QScrollArea = scrollArea
+
+		self.settings().setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, True)
+		self.settings().setAttribute(QWebEngineSettings.WebAttribute.PdfViewerEnabled, True)
+
+		self.resize()
+
+	def resize(self):
+		# self.setGeometry(QRect(0, 0, self.scrollArea.width() - 2, self.scrollArea.height() - 2)) #exclude Margin
+		self.setGeometry(QRect(0, 0, self.scrollArea.contentsRect().width(), self.scrollArea.contentsRect().height())) #exclude Margin
+		# print(f"Size: {self.size()}, Rect: {self.rect()}")
+		# print(f"Geometry: {self.frameGeometry()}")
+
+class ModAction(QAction):
+	def __init__(self, name: str, key_sequence: Qt.Key, parent: QWidget = None):
+		# if error try self as parent
+		super().__init__(name, parent=parent)
+		self.setShortcutVisibleInContextMenu(True)
+		self.setShortcut(key_sequence)
+		self.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+
 class Tree(QTreeView):
 	# global project_filenames
 	# global preview_types
@@ -521,13 +573,13 @@ class Tree(QTreeView):
 		
 		self.undostack = QUndoStack()
 
-		self.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Expanding)
-		self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+		self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Expanding)
+		self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 		self.customContextMenuRequested.connect(self.context_menu)
-		self.setDragDropMode(QAbstractItemView.DragDrop)
-		self.setContextMenuPolicy(Qt.CustomContextMenu)
+		self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+		self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 		self.doubleClicked.connect(self.openFile)
-		self.setDefaultDropAction(Qt.CopyAction)
+		self.setDefaultDropAction(Qt.DropAction.CopyAction)
 		self.viewport().setAcceptDrops(True)
 		self.setAlternatingRowColors(True)
 		self.setDropIndicatorShown(True)
@@ -535,49 +587,28 @@ class Tree(QTreeView):
 		self.setModel(model)
 
 		# self.resizeColumnToContents(0)
-		self.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+		self.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
 
-		self.renameAction = QAction('Rename', self)
-		self.renameAction.setShortcutVisibleInContextMenu(True)
-		self.renameAction.setShortcut(QKeySequence(Qt.Key_F2))
-		self.renameAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.renameAction = ModAction('Rename', Qt.Key.Key_F2, parent=self)
 		self.renameAction.triggered.connect(lambda event: self.renameFileFolder(event))
 
-		self.deleteFileAction = QAction('Delete', self)
-		self.deleteFileAction.setShortcutVisibleInContextMenu(True)
-		self.deleteFileAction.setShortcut(QKeySequence(Qt.Key_Delete))
-		self.deleteFileAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.deleteFileAction = ModAction('Delete', Qt.Key.Key_Delete, parent=self)
 		self.deleteFileAction.triggered.connect(lambda event: self.deleteFile(event))
 		
-		self.removeOuterFolderAction = QAction('Delete Outer Folder', self)
-		self.removeOuterFolderAction.setShortcutVisibleInContextMenu(True)
-		self.removeOuterFolderAction.setShortcut(QKeySequence(Qt.SHIFT + Qt.Key_Delete))
-		self.removeOuterFolderAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.removeOuterFolderAction = ModAction('Delete Outer Folder', QKeySequence(Qt.Modifier.SHIFT | Qt.Key.Key_Delete), parent=self)
 		self.removeOuterFolderAction.triggered.connect(lambda event: self.removeOuterFolderPopup(event))
 
-		self.moveToNewFolderAction = QAction('Move to New Folder', self)
-		self.moveToNewFolderAction.setShortcutVisibleInContextMenu(True)
-		self.moveToNewFolderAction.setShortcut(QKeySequence(Qt.ALT + Qt.SHIFT + Qt.Key_N))
+		self.moveToNewFolderAction = ModAction('Move to New Folder', QKeySequence(Qt.Modifier.ALT | Qt.Modifier.SHIFT | Qt.Key.Key_N), self)
 		# self.moveToNewFolderAction.setShortcut(QKeySequence("Alt+Shift+N"))
-		self.moveToNewFolderAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
 		self.moveToNewFolderAction.triggered.connect(lambda event: self.MovetoNewFolderPopup(event))
 
-		self.createFolderAction = QAction('Create Folder', self)
-		self.createFolderAction.setShortcutVisibleInContextMenu(True)
-		self.createFolderAction.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_N))
-		self.createFolderAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.createFolderAction = ModAction('Create Folder', QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_N), parent=self)
 		self.createFolderAction.triggered.connect(lambda event: self.createFolderPopup(event))
 		
-		self.duplicateFileFolderAction = QAction('Duplicate', self)
-		self.duplicateFileFolderAction.setShortcutVisibleInContextMenu(True)
-		self.duplicateFileFolderAction.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_J))
-		self.duplicateFileFolderAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.duplicateFileFolderAction = ModAction('Duplicate', QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_J), parent=self)
 		self.duplicateFileFolderAction.triggered.connect(lambda event: self.duplicateFolderPopup(event))
 
-		self.moveToRootAction = QAction('Move to Root', self)
-		self.moveToRootAction.setShortcutVisibleInContextMenu(True)
-		self.moveToRootAction.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_Up))
-		self.moveToRootAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		self.moveToRootAction = ModAction('Move to Root', QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_Up), parent=self)
 		self.moveToRootAction.triggered.connect(lambda event: self.moveToRootPopUp(event))
 
 		self.addAction(self.renameAction)
@@ -589,13 +620,14 @@ class Tree(QTreeView):
 		self.addAction(self.createFolderAction)
 
 	def keyPressEvent(self, event):
-		if event.key() == (Qt.Key_Control and Qt.Key_Y):
+		#try Key_Control if problem occurs
+		if event.key() == (Qt.Key.Key_Control and Qt.Key.Key_Y):
 			self.undostack.redo()
-		if event.key() == (Qt.Key_Control and Qt.Key_Z):
+		if event.key() == (Qt.Key.Key_Control and Qt.Key.Key_Z):
 			self.undostack.undo()
 
 	def checkDrag(self):
-		modifiers = qApp.queryKeyboardModifiers()
+		modifiers = QApplication.instance().queryKeyboardModifiers()
 		if self.modifiers != modifiers:
 			self.modifiers = modifiers
 			pos = QCursor.pos()
@@ -609,71 +641,80 @@ class Tree(QTreeView):
 		# if event.button() == Qt.LeftButton:
 			# self.setCurrentIndex(self.indexAt(event.pos()))
 			# self.selectionStart = event.pos
-		if event.button() == Qt.RightButton:
-			self.dragStartPosition = event.pos()
+		# if event.button() == Qt.MouseButton.RightButton:
+		self.dragStartPosition = event.pos()
 
 		return super().mousePressEvent(event)
 
 	def mouseMoveEvent(self, event):
-		if event.buttons() != Qt.RightButton:
-			return
+		# if event.buttons() != Qt.MouseButton.RightButton:
+			# return
+
 		# elif event.buttons() == Qt.LeftButton:
 		#     self.setSelection(QRect(self.selectionStart, event.pos()),QItemSelectionModel.Select)
 		if ((event.pos() - self.dragStartPosition).manhattanLength() < QApplication.startDragDistance()):
 			return
 
 		print("dragging")
-		self.modifiers = qApp.queryKeyboardModifiers()
+		self.modifiers = QApplication.instance().queryKeyboardModifiers()
 		# a local timer, it will be deleted when the function returns
 		dragTimer = QTimer(interval=500, timeout=self.checkDrag) # 100
 		dragTimer.start()
-		self.startDrag(Qt.MoveAction|Qt.CopyAction)
+		self.startDrag(Qt.DropAction.MoveAction|Qt.DropAction.CopyAction)
 
 	def openFile(self, index):
-		
-		selected_index = self.selectedIndexes()
+		print("opening")
+		selected_index = [index] if len(self.selectedIndexes()) == 0 else [index_ if index_.column() == 0 else None for index_ in self.selectedIndexes()]
 
 		if len(selected_index) > 5:
 			msgBox = MessagePopUp(f"Welp! Are you sure you want to open {len(selected_index)} files consecutively?", "This will slow down the prosessing")
-			if msgBox.clickedbutton == QMessageBox.No:
+			if msgBox.clickedbutton == QMessageBox.StandardButton.No:
 				return
 
-		if self.isLeft:  # make the final mechanism
-			for indep in selected_index:
-				if indep.column() == 0:
-					model = index.model()
-					fileinfo = model.fileInfo(indep)
+		# if self.isLeft:  # make the final mechanism
+		# 	for indep in selected_index:
+		# 		if indep.column() == 0:
+		# 			model = index.model()
+		# 			fileinfo = model.fileInfo(indep)
 
-					complete_proj_file = fileinfo.absoluteFilePath()
+		# 			complete_proj_file = fileinfo.absoluteFilePath()
 
-					# temp_project_path = f"{temp}/{self.fileName}"
+		# 			# temp_project_path = f"{temp}/{self.fileName}"
 					
-					# if not os.path.exists(temp_project_path):
-					# 	os.mkdir(temp_project_path)
+		# 			# if not os.path.exists(temp_project_path):
+		# 			# 	os.mkdir(temp_project_path)
 					
-					# files_list = os.listdir(self.project_dir)
-					# print(files_list)
-					# for item in files_list:
-					# 	print(f"{self.project_dir}{item} {temp_project_path}/{item}")
-					# 	os.link(f"{self.project_dir}{item}", f"{temp_project_path}/{item}")
-					# 	# print(f"""mklink /h \"{temp_project_path}/{item}\" \"{self.project_dir}{item}\" """)
-					# 	# subprocess.run(f"""mklink /h \"{temp_project_path}/{item}\" \"{self.project_dir}{item}\" """)
+		# 			# files_list = os.listdir(self.project_dir)
+		# 			# print(files_list)
+		# 			# for item in files_list:
+		# 			# 	print(f"{self.project_dir}{item} {temp_project_path}/{item}")
+		# 			# 	os.link(f"{self.project_dir}{item}", f"{temp_project_path}/{item}")
+		# 			# 	# print(f"""mklink /h \"{temp_project_path}/{item}\" \"{self.project_dir}{item}\" """)
+		# 			# 	# subprocess.run(f"""mklink /h \"{temp_project_path}/{item}\" \"{self.project_dir}{item}\" """)
 
-					# os.link(complete_proj_file, f"{temp_project_path}/{self.fileName}")
+		# 			# os.link(complete_proj_file, f"{temp_project_path}/{self.fileName}")
 
-					# print(f"""ln --recursive \"{self.project_dir}\" \"{temp_project_path}\"""")
-					# subprocess.run(f"""ln --recursive \"{self.project_dir}\" \"{temp_project_path}\"""")
+		# 			# print(f"""ln --recursive \"{self.project_dir}\" \"{temp_project_path}\"""")
+		# 			# subprocess.run(f"""ln --recursive \"{self.project_dir}\" \"{temp_project_path}\"""")
 				
-					QDesktopServices.openUrl(QUrl.fromLocalFile(complete_proj_file))
+		# 			QDesktopServices.openUrl(QUrl.fromLocalFile(complete_proj_file))
 
-				# note if the file is already open, then when a file is dropped on the self.project_dir (.ai folder) we just make a hard link to the tem_project_path
+		# 		# note if the file is already open, then when a file is dropped on the self.project_dir (.ai folder) we just make a hard link to the tem_project_path
 		
-		elif self.isRight:
-			for indep in selected_index:
-				if indep.column() == 0:
-					model = index.model()
-					fileinfo = model.fileInfo(indep)
-					QDesktopServices.openUrl(QUrl.fromLocalFile(fileinfo.absoluteFilePath()))
+		# elif self.isRight:
+		# 	for indep in selected_index:
+		# 		if indep.column() == 0:
+		# 			model = index.model()
+		# 			fileinfo = model.fileInfo(indep)
+		# 			QDesktopServices.openUrl(QUrl.fromLocalFile(fileinfo.absoluteFilePath()))
+
+		# same opem mechanism for both tree
+		for indep in selected_index:
+			model = self.model()
+			fileinfo = model.fileInfo(indep)
+			path = fileinfo.absoluteFilePath()
+
+			QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
 	def dragEnterEvent(self, event):
 		self.passed_m = event.mimeData()
@@ -694,10 +735,10 @@ class Tree(QTreeView):
 			print("no urls")
 			event.ignore()
 			return
-		if qApp.queryKeyboardModifiers() & Qt.ShiftModifier:
-			event.setDropAction(Qt.MoveAction)
+		if QApplication.instance().queryKeyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
+			event.setDropAction(Qt.DropAction.MoveAction)
 		else:
-			event.setDropAction(Qt.CopyAction)
+			event.setDropAction(Qt.DropAction.CopyAction)
 		event.accept()
 
 	def dropEvent(self, event):
@@ -706,7 +747,7 @@ class Tree(QTreeView):
 		dropAction = event.dropAction()
 
 		# if event.source():
-		ix = self.indexAt(event.pos())
+		ix = self.indexAt(event.position().toPoint())
 		model = self.model()
 
 		if ix.isValid():
@@ -730,7 +771,7 @@ class Tree(QTreeView):
 				if source == destination:
 					continue  # means they are in the same folder
 				if info.isDir():
-					if dropAction == Qt.CopyAction:
+					if dropAction == Qt.DropAction.CopyAction:
 						print(f"QDir -> source: {source} {os.path.exists(source)} | destination: {os.path.exists(destination)} {destination}")
 						# rep = QDir().rename(source, destination)
 						# print(rep)
@@ -744,7 +785,7 @@ class Tree(QTreeView):
 						
 						# print(rep)
 
-					elif dropAction == Qt.MoveAction:
+					elif dropAction == Qt.DropAction.MoveAction:
 						destination = multiCopyHandler(destination)
 						shutil.move(source, destination)
 				elif info.isFile():
@@ -757,10 +798,10 @@ class Tree(QTreeView):
 						# 	destination += "." + n_info.completeSuffix()
 						destination = multiCopyHandler(destination)
 
-					if dropAction == Qt.CopyAction:
+					if dropAction == Qt.DropAction.CopyAction:
 						# destination = 
 						qfile.copy(destination)
-					elif dropAction == Qt.MoveAction:
+					elif dropAction == Qt.DropAction.MoveAction:
 						qfile.rename(destination)
 					print(f"added -> {info.fileName()}")  # for debugging
 
@@ -798,19 +839,20 @@ class Tree(QTreeView):
 		self.menu.addAction(self.moveToNewFolderAction)
 		self.menu.addAction(self.createFolderAction)
 
-		self.modifier_pressed = qApp.queryKeyboardModifiers()
-		if self.modifier_pressed == Qt.ShiftModifier:
+		self.modifier_pressed = QApplication.instance().queryKeyboardModifiers()
+		if self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
 			print("Shift Pressed")
 
 		# add other required actions
 		self.menu.popup(QCursor.pos())
 	
+	#-> do file operations
 	def createFolderPopup(self, event):
 		# note if selected is empty then just create a new folder
 		model = self.model()  # proxy model not needed
 
 		popup = MessageBoxwLabel()
-		if popup.returned == QDialog.Accepted:
+		if popup.returned == QDialog.DialogCode.Accepted:
 			print("algorithim for creating folders")
 
 			#warning: check if the folder exist
@@ -818,7 +860,7 @@ class Tree(QTreeView):
 			index_list = self.selectedIndexes()
 
 			if index_list:
-				if self.modifier_pressed != Qt.ShiftModifier:
+				if self.modifier_pressed != Qt.KeyboardModifier.ShiftModifier:
 					new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
 					
 					if not os.path.exists(new_folder):
@@ -827,20 +869,20 @@ class Tree(QTreeView):
 					else:
 						# -> Prompt if override or just use that folder
 						msgBox = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
-						if msgBox.clickedbutton == QMessageBox.Yes:
+						if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 							inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
 							# -> Override
-							if inmsgBox.clickedbutton == QMessageBox.Yes:
+							if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 								# -> deleting folder
 								# shutil.rmtree(new_folder) #moved
 								# -> creating folder
 								# os.mkdir(new_folder) #moved
 								override = True
 
-							elif inmsgBox.clickedbutton == QMessageBox.No:
+							elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
 								return
 
-						elif msgBox.clickedbutton == QMessageBox.No:
+						elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
 							# -> Don't Override
 							counter = 1
 							# while os.path.exists(new_folder):
@@ -855,7 +897,7 @@ class Tree(QTreeView):
 							# os.rename(fileIn.absoluteFilePath(), new_file)
 							# os.mkdir(new_folder) #moved
 
-						elif msgBox.clickedbutton == QMessageBox.Cancel:
+						elif msgBox.clickedbutton == QMessageBox.StandardButton.Cancel:
 							# -> Cancel
 							pass
 						
@@ -865,7 +907,7 @@ class Tree(QTreeView):
 					# note convert this to a redo method and just get tje new folder value and delete it
 					# note incase cancel was clicked, don't remove its folder and just move the files
 
-				elif self.modifier_pressed == Qt.ShiftModifier:
+				elif self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
 					print("[createFolderPopup] - Shift Mode")
 					for index in index_list:
 						if index.column() == 0:
@@ -878,21 +920,21 @@ class Tree(QTreeView):
 									pass
 								else:
 									# -> Prompt if override or just use that folder
-									msgBox = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No", buttons=QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
-									if msgBox.clickedbutton == QMessageBox.Yes:
+									msgBox = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No", buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
+									if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 										inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
 										# -> Override
-										if inmsgBox.clickedbutton == QMessageBox.Yes:
+										if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 											#-> deleting folder
 											# shutil.rmtree(new_folder) #moved
 											# #-> creating folder
 											# os.mkdir(new_folder) #moved
 											override = True
 
-										elif inmsgBox.clickedbutton == QMessageBox.No:
+										elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
 											return
 
-									elif msgBox.clickedbutton == QMessageBox.No:
+									elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
 										# -> Don't Override
 										counter = 1
 										# while os.path.exists(new_folder):
@@ -907,7 +949,7 @@ class Tree(QTreeView):
 										# os.rename(fileIn.absoluteFilePath(), new_file)
 										# os.mkdir(new_folder)  #moved
 
-									elif msgBox.clickedbutton == QMessageBox.Cancel:
+									elif msgBox.clickedbutton == QMessageBox.StandardButton.Cancel:
 										# -> Cancel
 										pass
 								
@@ -926,7 +968,7 @@ class Tree(QTreeView):
 		model = self.model()
 
 		popup = MessageBoxwLabel()
-		if popup.returned == QDialog.Accepted:
+		if popup.returned == QDialog.DialogCode.Accepted:
 			print("algorithim for creating folders")
 
 			#warning: check if the folder exist
@@ -950,11 +992,11 @@ class Tree(QTreeView):
 					pass
 				else:
 					# -> Prompt if override or just use that folder
-					msgBox = MessagePopUp("The file/folder with the same name already exists, \n Do you want to Override the old file/folder?", "If you want to just use the old folder just select No", buttons=QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
-					if msgBox.clickedbutton == QMessageBox.Yes:
+					msgBox = MessagePopUp("The file/folder with the same name already exists, \n Do you want to Override the old file/folder?", "If you want to just use the old folder just select No", buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
+					if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 						inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
 						# -> Override
-						if inmsgBox.clickedbutton == QMessageBox.Yes:
+						if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 							# #-> deleting file/folder
 							# shutil.rmtree(new_file)
 							# #-> creating file/folder
@@ -973,10 +1015,10 @@ class Tree(QTreeView):
 							# source to destination
 							# os.rename(fileIn.absoluteFilePath(), new_file)
 
-						elif inmsgBox.clickedbutton == QMessageBox.No:
+						elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
 							return
 
-					elif msgBox.clickedbutton == QMessageBox.No:
+					elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
 						# -> Don't Override
 						# counter = 1
 						# while os.path.exists(new_file):
@@ -990,7 +1032,7 @@ class Tree(QTreeView):
 						# os.rename(fileIn.absoluteFilePath(), new_file)
 						override = False
 
-					elif msgBox.clickedbutton == QMessageBox.Cancel:
+					elif msgBox.clickedbutton == QMessageBox.StandardButton.Cancel:
 						# -> Cancel
 						pass
 
@@ -1007,7 +1049,7 @@ class Tree(QTreeView):
 		# model = proxyModel.sourceModel()
 
 		popup = MessageBoxwLabel()
-		if popup.returned == QDialog.Accepted:
+		if popup.returned == QDialog.DialogCode.Accepted:
 			print("algorithim for creating folders")
 
 			#warning: check if the folder exist
@@ -1016,7 +1058,7 @@ class Tree(QTreeView):
 
 			print(f"Folder Name -> '{popup.text}'")
 			if index_list:
-				if self.modifier_pressed != Qt.ShiftModifier:
+				if self.modifier_pressed != Qt.KeyboardModifier.ShiftModifier:
 					new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
 					
 					if not os.path.exists(new_folder):
@@ -1027,20 +1069,20 @@ class Tree(QTreeView):
 						override = False
 						# -> Prompt if override or just use that folder
 						msgBox = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
-						if msgBox.clickedbutton == QMessageBox.Yes:
+						if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 							inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
 							# -> Override
-							if inmsgBox.clickedbutton == QMessageBox.Yes:
+							if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 								# #-> deleting folder
 								# shutil.rmtree(new_folder)
 								# #-> creating folder
 								# os.mkdir(new_folder)
 								override = True
 
-							elif inmsgBox.clickedbutton == QMessageBox.No:
+							elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
 								return
 							
-						elif msgBox.clickedbutton == QMessageBox.No:
+						elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
 							# -> Don't Override
 							# counter = 1
 							# while os.path.exists(new_folder):
@@ -1055,7 +1097,7 @@ class Tree(QTreeView):
 							# os.rename(fileIn.absoluteFilePath(), new_file)
 							# os.mkdir(new_folder) #moved
 
-						elif msgBox.clickedbutton == QMessageBox.Cancel:
+						elif msgBox.clickedbutton == QMessageBox.StandardButton.Cancel:
 							# -> Cancel
 							pass
 
@@ -1082,7 +1124,7 @@ class Tree(QTreeView):
 					# 			print(file_to_rename)
 					# 			shutil.move(file_to_rename, new_folder)
 
-				elif self.modifier_pressed == Qt.ShiftModifier:
+				elif self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
 					print("[MovetoNewFolderPopup] -> Shift Mode")
 					fileIn = model.fileInfo(index_list[0])
 					new_folder = fileIn.absolutePath() + QDir.separator() + popup.text  # note not root path()
@@ -1092,19 +1134,19 @@ class Tree(QTreeView):
 					else:
 						#warning: Prompt if override or just use that folder
 						msgBox = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
-						if msgBox.clickedbutton == QMessageBox.Yes:
+						if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 							inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
 							# -> Override
-							if inmsgBox.clickedbutton == QMessageBox.Yes:
+							if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 								#-> deleting folder
 								shutil.rmtree(new_folder)
 								#-> creating folder
 								os.mkdir(new_folder)
 
-							elif inmsgBox.clickedbutton == QMessageBox.No:
+							elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
 								return
 
-						elif msgBox.clickedbutton == QMessageBox.No:
+						elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
 							# -> Don't Override
 							pass
 
@@ -1128,11 +1170,11 @@ class Tree(QTreeView):
 		
 		msgBox = MessagePopUp("Do you want to continue?", "You can still recover the file/folder in the recycle bin")
 
-		print(f"{msgBox} : {QMessageBox.Yes} : {msgBox == QMessageBox.Yes}")
+		print(f"{msgBox} : {QMessageBox.StandardButton.Yes} : {msgBox == QMessageBox.StandardButton.Yes}")
 
 		#warning: not working
 
-		if msgBox.clickedbutton == QMessageBox.Yes:
+		if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 			model = self.model()
 
 			index_list = self.selectedIndexes()
@@ -1164,7 +1206,7 @@ class Tree(QTreeView):
 		
 		# -> Prompt if they are sure
 		inmsgBox = MessagePopUp(f"Delete the folder \n {list_of_to_be_deleted}", "You can still recover it from the recycle bin")
-		if inmsgBox.clickedbutton == QMessageBox.Yes:
+		if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 			
 			# parent_dir.rmdir()
 			# shutil.move()
@@ -1172,7 +1214,7 @@ class Tree(QTreeView):
 			unRemoveOuterFolder = unRemoveOuterFolderPopup(index_list, override=False)
 			self.undostack.push(unRemoveOuterFolder)
 
-		elif inmsgBox.clickedbutton == QMessageBox.No:
+		elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
 			pass
 
 	def duplicateFolderPopup(self, event):
@@ -1238,16 +1280,15 @@ class Tree(QTreeView):
 		self.undostack.push(unMoveToRoot)
 
 class FileSystemModel(QFileSystemModel):
-	hideMode = False
-	conNameFilters = []
+	# hideMode = False
+	_nameFilters = []
+	def __init__(self):
+		super().__init__()
+		# self.setNameFilterDisables(False)
+
 	def hasChildren(self, parent):
-		# file_info = self.fileInfo(parent)
-		# _dir = QDir(file_info.absoluteFilePath())
-
 		# flags = [1, 1024, 2, 4, 8, 8192, 16384, 16, 32, 64, 128, 256, 512, 2048]
-
 		# flgs = self.filter()
-
 		# print([flag if flgs & flag == 0 else None for flag in flags])
 
 		_dir = QDir(self.filePath(parent))
@@ -1257,88 +1298,51 @@ class DisDelegate(QStyledItemDelegate):
 	# hideMode = False
 	def initStyleOption(self, option: 'QStyleOptionViewItem', index: QModelIndex) -> None:
 		super().initStyleOption(option, index)
-		row = index.row()
+		# row = index.row()
 		model = index.model()
-		# sourcemodel = index.model().sourceModel()
-
-		# print(f"row {index.row()}")
-		# print(f"model {index.model()}")
-		# print(f"source model {index.model().sourceModel()}")
 		
-		# if not model.hideMode:
-		# index = model.mapToSource(index)
 		if not index.isValid():
-			# return 0
-			pass
-
+			return
 		
 		qdir = model.filePath(index)
-		# print(f"{row} - {qdir}")
-
-		# Disable even rows, enable odd rows
-		# if index.row() % 2 == 0:
-		#     return Qt.NoItemFlags
-		# else:
-		#     return Qt.ItemIsEnabled
+		
 		if model.isDir(index):
 			qdir = QDir(model.filePath(index))
-			# if model.conNameFilters:
-			# 	qdir.setNameFilters(model.conNameFilters)
-			qdir.setNameFilters(model.nameFilters())
+			qdir.setNameFilters(model._nameFilters)
 
-			# bl = qdir.entryList(qdir.NoDotAndDotDot|qdir.AllEntries|qdir.AllDirs)
-			bl = qdir.entryList(qdir.NoDotAndDotDot|qdir.AllEntries)
+			bl = qdir.entryList(qdir.Filter.NoDotAndDotDot | qdir.Filter.AllEntries)
 
 			if bool(bl):
 				pass
-				# return model.enabled
 			else:
-				# return model.disabled
-				# option.palette.setBrush(QPalette.Base, QColor("#eeeeee"))
 				# option.palette.setBrush(QPalette.Base, Qt.red)
-				option.palette.setBrush(QPalette.Text, QColor("#9a9a9a"))
-				# option.backgroundBrush = QColor("red")
+				option.palette.setBrush(QPalette.ColorRole.Text, QColor("#9a9a9a"))
 				# option.backgroundBrush = QColor("#eeeeee")
 		else:  # <- index refers to a file
-			# s = f"filters: {model.nameFilters()}, filename: {model.fileName(index)}"
 
 			# looks like the color in the column 0, will be the colum of the row
-			if index.column() != 0:
-				return
+			# if index.column() != 0:
+				# return super().initStyleOption(option, index)
+				# pass
 
 			qdir = QDir(model.fileName(index))
 
-			# c = qdir.match(model.conNameFilters, model.fileName(index))
-			c = qdir.match(model.nameFilters(), model.fileName(index))
-			# print(f"{c} - {qdir}")
-
+			c = qdir.match(model._nameFilters, model.fileName(index))
 			if c:
-				# return model.enabled
 				pass
 			else:
-				# return model.disabled # <- returns true if the file matches the nameFilters
-				# option.palette.setBrush(QPalette.Base, QColor("#eeeeee"))
 				# option.palette.setBrush(QPalette.Base, Qt.red)
-				option.palette.setBrush(QPalette.Text, QColor("#9a9a9a"))
-				# option.backgroundBrush = QColor("red")
+				option.palette.setBrush(QPalette.ColorRole.Text, QColor("#9a9a9a"))
 				# option.backgroundBrush = QColor("#eeeeee")
-		# return model.enabled
 
 class ReadOnlyDelegate(QStyledItemDelegate):
-	def initStyleOption(self, option: QStyleOptionViewItem, index: QModelIndex):
+	def initStyleOption(self, option: QStyleOptionViewItem, index: QModelIndex) -> None:
 		super().initStyleOption(option, index)
 
-		# model = index.model()
-
-		if index.flags() & Qt.ItemIsEditable:
-			# print(True)
+		if index.flags() & Qt.ItemFlag.ItemIsEditable:
 			option.palette.setBrush(QPalette.Text, QColor("#dc0f14"))
 			# option.backgroundBrush = QBrush(QColor("#dc0f14"))
-			# pass
 		else:
-			# print(False)
 			option.palette.setBrush(QPalette.Text, QColor("#3daa33"))
 			# option.backgroundBrush = QBrush(QColor("#3daa33"))
-		# print(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-		# print((Qt.ItemIsEnabled | Qt.ItemIsSelectable) == 34)
 
