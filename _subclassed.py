@@ -10,7 +10,31 @@ from PyQt6.QtWebEngineCore import QWebEngineSettings
 import os
 import shutil
 from pathlib import Path, PureWindowsPath
+from functools import singledispatch
 
+@singledispatch
+def Mmkdir(path):
+	os.mkdir(path)
+
+@Mmkdir.register(list)
+def Mmkdir(path_list):
+	for path in path_list:
+		os.mkdir(path)
+
+@singledispatch
+def exists(path :str):
+	return os.path.exists(path)
+
+@exists.register(list)
+def _(index_list):
+	model : QFileSystemModel = index_list[0].model() #getting an index sample
+
+	for index in index_list:
+		if model.fileInfo(index).exists():
+			continue
+		return True
+	return False
+	
 def multiCopyHandler(path):
 	p = Path(path)
 	if p.exists():
@@ -46,10 +70,15 @@ def multiCopyHandler(path):
 		return p.absolute()
 
 # -> undo commands
-class unCreateFolderPopup(QUndoCommand):
-	def __init__(self, newfolder, override=False):
+class doCreateFolder(QUndoCommand):
+	def __init__(self, newfolder=str, override=False, index_list=[], model=QFileSystemModel):
 		super().__init__()
-		self.new_folder = newfolder
+		#-> both index_list and mode is partners
+
+		# self.index_list = index_list
+		index_list = [model.filePath(index) for index in index_list]
+		#-> Mmkdir() takes str or list[str]
+		self.new_folder = index_list if index_list else multiCopyHandler(newfolder)
 		self.override = override
 
 	def redo(self):
@@ -64,10 +93,10 @@ class unCreateFolderPopup(QUndoCommand):
 			self.recycle_path = file.fileName()
 
 			# -> creating folder
-			os.mkdir(self.new_folder)
+			Mmkdir(self.new_folder)
 			return
 
-		os.mkdir(self.new_folder)
+		Mmkdir(self.new_folder)
 	
 	def undo(self):
 		print('undoing')
@@ -77,12 +106,13 @@ class unCreateFolderPopup(QUndoCommand):
 		QFile(self.new_folder).moveToTrash()
 
 class unMoveToNewFolderPopup(QUndoCommand):
-	def __init__(self, newfolder, index_list, model, override=False):
+	def __init__(self, parent, newfolder, index_list, model, override=False):
 		super().__init__()
-		self.model = model
-		self.index_list = index_list
-		self.override = override
+		self.model : QFileSystemModel= model
+		self.index_list : list[QModelIndex] = index_list
+		self.override : bool = override
 		self.new_folder = newfolder
+		self.parent : QTreeView = parent
 	
 	def redo(self):
 		# -> creating folder
@@ -96,9 +126,9 @@ class unMoveToNewFolderPopup(QUndoCommand):
 			self.recycle_path = file.fileName()
 
 			# -> creating folder
-			os.mkdir(self.new_folder)
+			self.model.mkdir(self.parent.rootIndex(), self.new_folder)
 		else:
-			os.mkdir(self.new_folder)
+			self.model.mkdir(self.parent.rootIndex(), self.new_folder)
 
 		# -> moving files
 		for index_fileinfo in self.index_list:
@@ -109,6 +139,8 @@ class unMoveToNewFolderPopup(QUndoCommand):
 				file_to_rename = index_fileinfo.canonicalFilePath()
 				print(file_to_rename)
 				shutil.move(file_to_rename, self.new_folder)
+		
+		self.parent.Mexpand(self.model.index(self.new_folder, 0))
 	
 	def undo(self):
 		# -> moving files
@@ -156,7 +188,11 @@ class unRenamePopup(QUndoCommand):
 
 		elif not self.one_file:
 			for index_fileinfo in self.index_list:
-				new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file
+				if index_fileinfo.isFile():
+					new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file + "." + index_fileinfo.suffix()
+				elif index_fileinfo.isDir():
+					new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file
+				
 				proofed_name = multiCopyHandler(new_path)
 				
 				self.converted.append([index_fileinfo.absoluteFilePath(), proofed_name])
@@ -352,6 +388,29 @@ class MessagePopUp(QMessageBox):
 
 		# you can also use self.clickedButton() to access
 		self.clickedbutton = self.exec()
+		# self.m_exec = self.exec()
+
+class MessageOverrideConfirmationPopUp():
+	def __init__(self):
+		
+		overrideConfirmationPopup = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
+
+		if overrideConfirmationPopup.clickedbutton == QMessageBox.StandardButton.Yes:
+			self.confirmOverride = True
+		elif overrideConfirmationPopup.clickedbutton == QMessageBox.StandardButton.No:
+			self.confirmOverride = False
+
+class MessageOverridePopUp():
+	def __init__(self):
+		
+		overridePopup = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
+
+		if overridePopup.clickedbutton == QMessageBox.StandardButton.Yes:
+			self.override = True
+			self.confirmOverride = MessageOverrideConfirmationPopUp().confirmOverride
+			
+		elif overridePopup.clickedbutton == QMessageBox.StandardButton.No:
+			self.override = False
 
 class MessageBoxwLabel(QDialog):
 	text = None
@@ -820,6 +879,15 @@ class Tree(QTreeView):
 		# context menu #
 		pass
 
+	@singledispatch
+	def Mexpand(self, index: QModelIndex):
+		self.expand(index)
+	
+	@Mexpand.register(list)
+	def _(self, index_list: list[QModelIndex]):
+		for index in index_list:
+			self.expand(index)
+
 	# note to fuse the shift mode and non shift mode, just recieve the path and proceed
 	def context_menu(self, event):
 		# print(f"sender -> {self.tree_sender.sender()}") 
@@ -839,9 +907,9 @@ class Tree(QTreeView):
 		self.menu.addAction(self.moveToNewFolderAction)
 		self.menu.addAction(self.createFolderAction)
 
-		self.modifier_pressed = QApplication.instance().queryKeyboardModifiers()
-		if self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
-			print("Shift Pressed")
+		# self.modifier_pressed = QApplication.instance().queryKeyboardModifiers()
+		# if self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
+			# print("Shift Pressed")
 
 		# add other required actions
 		self.menu.popup(QCursor.pos())
@@ -858,107 +926,59 @@ class Tree(QTreeView):
 			#warning: check if the folder exist
 
 			index_list = self.selectedIndexes()
+			index_list = [index for index in index_list if index.column() == 0]
 
 			if index_list:
-				if self.modifier_pressed != Qt.KeyboardModifier.ShiftModifier:
-					new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
+				#-> try to detect if any folders to be created is already existing
+				if not exists(index_list, popup.text):
+					override = False
+				else:
+					override = MessageOverridePopUp().override
+
+				unCreateFolder = doCreateFolder("", override, index_list, model)
+				self.undostack.push(unCreateFolder)
+
+			else:
+				# if self.modifier_pressed != Qt.KeyboardModifier.ShiftModifier:
+				new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
+				
+				if not exists(new_folder):
+					# os.mkdir(new_folder)
+					override = False
+				else:
+					# -> Prompt if override or just use that folder
+					override = MessageOverridePopUp().override
+					# > if no , need after verification of multi copy handler
 					
-					if not os.path.exists(new_folder):
-						# os.mkdir(new_folder)
-						override = False
-					else:
-						# -> Prompt if override or just use that folder
-						msgBox = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
-						if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-							inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
-							# -> Override
-							if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-								# -> deleting folder
-								# shutil.rmtree(new_folder) #moved
-								# -> creating folder
-								# os.mkdir(new_folder) #moved
-								override = True
+				unCreateFolder = doCreateFolder(new_folder, override)
+				self.undostack.push(unCreateFolder)
 
-							elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
-								return
+				# note convert this to a redo method and just get tje new folder value and delete it
+				# note incase cancel was clicked, don't remove its folder and just move the files
 
-						elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
-							# -> Don't Override
-							counter = 1
-							# while os.path.exists(new_folder):
-							# 	base_folder = new_folder
+				#-> When there is selected folder, just create folder inside it
+				# elif self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
+				# 	print("[createFolderPopup] - Shift Mode")
+				# 	for index in index_list:
+				# 		if index.column() == 0:
+				# 			fileIn = model.fileInfo(index)
+				# 			if fileIn.isDir():
+				# 				new_folder = fileIn.absoluteFilePath() + QDir.separator() + popup.text
+
+				# 				if not os.path.exists(new_folder):
+				# 					# os.mkdir(new_folder)
+				# 					pass
+				# 				else:
+				# 					# -> Prompt if override or just use that folder
+				# 					override = MessageOverridePopUp().override
+				# 					# > if no , need after verification of multi copy handler
 								
-							# 	new_folder = base_folder + f" (copy {counter})"
+				# 				if 'override' in globals():
+				# 					unCreateFolder = doCreateFolder(new_folder, override=override)
+				# 				else:
+				# 					unCreateFolder = doCreateFolder(new_folder)
 
-							# 	counter += 1
-
-							newfolder = multiCopyHandler(new_folder)
-
-							# os.rename(fileIn.absoluteFilePath(), new_file)
-							# os.mkdir(new_folder) #moved
-
-						elif msgBox.clickedbutton == QMessageBox.StandardButton.Cancel:
-							# -> Cancel
-							pass
-						
-					unCreateFolder = unCreateFolderPopup(new_folder, override)
-					self.undostack.push(unCreateFolder)
-
-					# note convert this to a redo method and just get tje new folder value and delete it
-					# note incase cancel was clicked, don't remove its folder and just move the files
-
-				elif self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
-					print("[createFolderPopup] - Shift Mode")
-					for index in index_list:
-						if index.column() == 0:
-							fileIn = model.fileInfo(index)
-							if fileIn.isDir():
-								new_folder = fileIn.absoluteFilePath() + QDir.separator() + popup.text
-
-								if not os.path.exists(new_folder):
-									# os.mkdir(new_folder)
-									pass
-								else:
-									# -> Prompt if override or just use that folder
-									msgBox = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No", buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
-									if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-										inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
-										# -> Override
-										if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-											#-> deleting folder
-											# shutil.rmtree(new_folder) #moved
-											# #-> creating folder
-											# os.mkdir(new_folder) #moved
-											override = True
-
-										elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
-											return
-
-									elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
-										# -> Don't Override
-										counter = 1
-										# while os.path.exists(new_folder):
-										# 	base_folder = new_folder
-											
-										# 	new_folder = base_folder + f" (copy {counter})"
-
-										# 	counter += 1
-
-										newfolder = multiCopyHandler(new_folder)
-
-										# os.rename(fileIn.absoluteFilePath(), new_file)
-										# os.mkdir(new_folder)  #moved
-
-									elif msgBox.clickedbutton == QMessageBox.StandardButton.Cancel:
-										# -> Cancel
-										pass
-								
-								if 'override' in globals():
-									unCreateFolder = unCreateFolderPopup(new_folder, override=override)
-								else:
-									unCreateFolder = unCreateFolderPopup(new_folder)
-
-								self.undostack.push(unCreateFolder)
+				# 				self.undostack.push(unCreateFolder)
 
 	def renameFileFolder(self, event):
 		print("renaming")
@@ -984,7 +1004,7 @@ class Tree(QTreeView):
 			index_list = [model.fileInfo(index) for index in index_list if index.column() == 0]
 			
 			if len(index_list) == 1:
-				new_file = index_list[0].absolutePath() + QDir.separator() + popup.text
+				new_file = index_list[0].absolutePath() + QDir.separator() + popup.text + "." + index_list[0].suffix()
 				if not os.path.exists(new_file):
 					# -> just move the folder/files
 					# os.rename(fileIn.absoluteFilePath(), new_file)
@@ -1104,7 +1124,7 @@ class Tree(QTreeView):
 					# unCreateFolder = unCreateFolderPopup(new_folder, override)
 					# self.undostack.push(unCreateFolder)
 					index_list = [model.fileInfo(index) for index in index_list if index.column() == 0]
-					unMoveToNewFolder = unMoveToNewFolderPopup(new_folder, index_list, model, override=override)
+					unMoveToNewFolder = unMoveToNewFolderPopup(self, new_folder, index_list, model, override=override)
 					self.undostack.push(unMoveToNewFolder)
 
 					# note convert this to a redo method and just get tje new folder value and delete it

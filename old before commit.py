@@ -72,7 +72,7 @@ thumbnail          = r"D:/Student - Files/Eliazar/thumbnail"
 # left_main_dirpath  = r"D:/Student - Files/Eliazar/Project Files"
 # right_main_dirpath = r"D:/Student - Files/Eliazar/Random Raw Files"
 
-class unCreateFolderPopup(QUndoCommand):
+class doCreateFolder(QUndoCommand):
 	def __init__(self, newfolder, override=False):
 		super().__init__()
 		self.new_folder = newfolder
@@ -428,7 +428,7 @@ class Tree(QTreeView):
 						# -> Cancel
 						pass
 					
-				unCreateFolder = unCreateFolderPopup(new_folder, override)
+				unCreateFolder = doCreateFolder(new_folder, override)
 				self.undostack.push(unCreateFolder)
 
 					# note convert this to a redo method and just get tje new folder value and delete it
@@ -481,9 +481,9 @@ class Tree(QTreeView):
 									pass
 							
 							if 'override' in globals():
-								unCreateFolder = unCreateFolderPopup(new_folder, override=override)
+								unCreateFolder = doCreateFolder(new_folder, override=override)
 							else:
-								unCreateFolder = unCreateFolderPopup(new_folder)
+								unCreateFolder = doCreateFolder(new_folder)
 
 							self.undostack.push(unCreateFolder)
 
