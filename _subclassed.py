@@ -13,38 +13,27 @@ from pathlib import Path, PureWindowsPath
 # from functools import singledispatch
 from multipledispatch import dispatch
 
-# class overload:
-#     def __init__(self, f):
-#         self.cases = {}
-
-#     def args(self, *args):
-#         def store_function(f):
-#             self.cases[tuple(args)] = f
-#             return self
-#         return store_function
-
-#     def __call__(self, *args):
-#         function = self.cases[tuple(type(arg) for arg in args)]
-#         return function(*args)
+#[Overload] -> OV_mkdir
 @dispatch(str)
-def Mmkdir(path):
+def OV_mkdir(path):
 	os.mkdir(path)
 
 @dispatch(PureWindowsPath)
-def Mmkdir(path):
+def OV_mkdir(path):
 	os.mkdir(path)
 
 @dispatch(list)
-def Mmkdir(path_list):
+def OV_mkdir(path_list):
 	for path in path_list:
 		os.mkdir(path)
 
+#[Overload] -> OV_exists
 @dispatch(str)
-def exists(path :str):
+def OV_exists(path :str):
 	return os.path.exists(path)
 
 @dispatch(list, str)
-def exists(index_list, name):
+def OV_exists(index_list, name):
 	"""_summary_
 
 	Args:
@@ -116,7 +105,7 @@ class doCreateFolder(QUndoCommand):
 
 		# self.index_list = index_list
 		# index_list = [model.filePath(index) for index in index_list]
-		#-> Mmkdir() takes str or list[str]
+		#-> OV_mkdir() takes str or list[str]
 		self.new_folder = [multiCopyHandler(newfolder) for newfolder in newfolder_list] if newfolder_list else multiCopyHandler(newfolder)
 		self.override = override
 
@@ -132,10 +121,10 @@ class doCreateFolder(QUndoCommand):
 			self.recycle_path = file.fileName()
 
 			# -> creating folder
-			Mmkdir(self.new_folder)
+			OV_mkdir(self.new_folder)
 			return
 
-		Mmkdir(self.new_folder)
+		OV_mkdir(self.new_folder)
 	
 	def undo(self):
 		print('undoing')
@@ -442,7 +431,7 @@ class MessageOverrideConfirmationPopUp():
 class MessageOverridePopUp():
 	def __init__(self):
 		
-		overridePopup = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
+		overridePopup = MessagePopUp("The folder with the same name already OV_exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
 
 		if overridePopup.clickedbutton == QMessageBox.StandardButton.Yes:
 			self.override = True
@@ -482,6 +471,7 @@ class MessageBoxwLabel(QDialog):
 		# self.close()
 		self.done(1)
 
+# -> extensions
 class ModScrollArea(QScrollArea):
 	def __init__(self):
 		super().__init__()
@@ -504,29 +494,19 @@ class ModLabel(QLabel):
 
 		self.setScaledContents(True)
 
-# class ModifiedQLabel(QLabel):
-# 	def __init__(self, effect=None):
-# 		super().__init__()
-		
-# 		self.setMinimumWidth(300)
-# 		self.setMaximumWidth(400)
-
-# 		# self.setSizePolicy(QSizePolicy.Ma, QSizePolicy.Preferred)
-# 		self.setSizePolicy(QSizePolicy.Expanding ,QSizePolicy.Expanding)
-# 		# self.sizeIncrement().setWidth(0)
-# 		# self.setFixedSize(self.size())
-
-# 		self.setGraphicsEffect(effect)
-
-# 		self.setStyleSheet("border: 1px solid black;")
-
-# -> extensions
-
 class ModPushButton(QPushButton):
 	def __init__(self, icon, str_):
 		super().__init__(icon, str_)
 
 		self.setFixedWidth(30)
+
+class ModAction(QAction):
+	def __init__(self, name: str, key_sequence: Qt.Key, parent: QWidget = None):
+		# if error try self as parent
+		super().__init__(name, parent=parent)
+		self.setShortcutVisibleInContextMenu(True)
+		self.setShortcut(key_sequence)
+		self.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
 # -> separation
 class QHSeparationLine(QFrame):
@@ -643,14 +623,6 @@ class ModWebEngineView(QWebEngineView):
 		self.setGeometry(QRect(0, 0, self.scrollArea.contentsRect().width(), self.scrollArea.contentsRect().height())) #exclude Margin
 		# print(f"Size: {self.size()}, Rect: {self.rect()}")
 		# print(f"Geometry: {self.frameGeometry()}")
-
-class ModAction(QAction):
-	def __init__(self, name: str, key_sequence: Qt.Key, parent: QWidget = None):
-		# if error try self as parent
-		super().__init__(name, parent=parent)
-		self.setShortcutVisibleInContextMenu(True)
-		self.setShortcut(key_sequence)
-		self.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
 class Tree(QTreeView):
 	# global project_filenames
@@ -863,7 +835,7 @@ class Tree(QTreeView):
 			for urlLocal in urlLocals:
 				path = urlLocal.toLocalFile()
 				info = QFileInfo(path)
-				destination = QDir(pathDir).filePath(info.fileName()) # <- check if this one exists
+				destination = QDir(pathDir).filePath(info.fileName()) # <- check if this one OV_exists
 				destination_cannonical = QDir(pathDir).path()
 				source = info.absoluteFilePath()
 				if source == destination:
@@ -969,7 +941,7 @@ class Tree(QTreeView):
 
 			if index_list:
 				#-> try to detect if any folders to be created is already existing
-				ret = exists(index_list, popup.text)
+				ret = OV_exists(index_list, popup.text)
 				if ret == True:
 					override = MessageOverridePopUp().override
 				elif isinstance(ret, list):
@@ -985,7 +957,7 @@ class Tree(QTreeView):
 				# if self.modifier_pressed != Qt.KeyboardModifier.ShiftModifier:
 				new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
 				
-				if not exists(new_folder):
+				if not OV_exists(new_folder):
 					# os.mkdir(new_folder)
 					override = False
 				else:
@@ -1055,7 +1027,7 @@ class Tree(QTreeView):
 					pass
 				else:
 					# -> Prompt if override or just use that folder
-					msgBox = MessagePopUp("The file/folder with the same name already exists, \n Do you want to Override the old file/folder?", "If you want to just use the old folder just select No", buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
+					msgBox = MessagePopUp("The file/folder with the same name already OV_exists, \n Do you want to Override the old file/folder?", "If you want to just use the old folder just select No", buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
 					if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 						inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
 						# -> Override
@@ -1125,7 +1097,7 @@ class Tree(QTreeView):
 				# if self.modifier_pressed != Qt.KeyboardModifier.ShiftModifier:
 				new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
 				
-				ret = exists(index_list, popup.text)
+				ret = OV_exists(index_list, popup.text)
 				if ret == True:
 					override = MessageOverridePopUp().override
 				elif isinstance(ret, list):
@@ -1164,7 +1136,7 @@ class Tree(QTreeView):
 				# 		os.mkdir(new_folder)
 				# 	else:
 				# 		#warning: Prompt if override or just use that folder
-				# 		msgBox = MessagePopUp("The folder with the same name already exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
+				# 		msgBox = MessagePopUp("The folder with the same name already OV_exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
 				# 		if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
 				# 			inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
 				# 			# -> Override
