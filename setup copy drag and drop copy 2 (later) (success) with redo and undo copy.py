@@ -6,7 +6,7 @@ import ctypes
 import shutil
 import subprocess
 from pathlib import *
-from send2trash import send2trash
+# from send2trash import send2trash
 
 # def deleteF(path: str):   # use moveToTrash
 # 	return path.replace("/", "\\")
