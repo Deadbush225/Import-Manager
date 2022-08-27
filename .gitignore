@@ -3,8 +3,8 @@ Branches/
 Del/
 Project/
 Sample Pic/
-Tests/
+# Tests/
 __pycache__/
 test copy/
-test/
-**/test
+# test/
+# **/test
