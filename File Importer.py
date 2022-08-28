@@ -19,9 +19,10 @@ import hashlib
 # 	return path.replace("/", "\\")
 
 # from PyQt5.QtWebEngineWidgets import QWebEnginePage, QWebEngineView
-from PyQt6.QtWidgets import *
-from PyQt6.QtGui import *
-from PyQt6.QtCore import *
+from PyQt6.QtWidgets import QWidget, QDialog, QApplication, QVBoxLayout, QHBoxLayout, QCheckBox, QComboBox, \
+	QPushButton, QStatusBar, QFileDialog, QMessageBox, QScrollArea, QStyledItemDelegate
+from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QDir, QUrl, QFileInfo
 import qdarkstyle
 
 from _subclassed import ModDict, ModPushButton, QHSeparationLine, ReadOnlyDelegate, ModTableWidget, \

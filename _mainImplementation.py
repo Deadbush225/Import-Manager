@@ -1,4 +1,16 @@
-from PyQt6.QtWidgets import QTreeView
+from PyQt6.QtWidgets import QTreeView, QAbstractItemView, QSizePolicy, QHeaderView, QApplication, \
+	QMessageBox, QMenu, QDialog
+from PyQt6.QtGui import QUndoStack, QKeySequence, QCursor, QDesktopServices
+from PyQt6.QtCore import Qt, QPoint, QTimer, QUrl, QFileInfo, QDir
+
+from _subclassed import DisDelegate, ModAction, MessagePopUp, MessageBoxwLabel, MessageOverridePopUp
+
+from _helpers import multiCopyHandler, 
+
+from _undoCommands import *
+
+import shutil
+import os
 
 class Tree(QTreeView):
 
@@ -380,11 +392,11 @@ class Tree(QTreeView):
 						# -> Cancel
 						pass
 
-				unRename = unRenamePopup(new_file, index_list, onefile=True)
+				unRename = doRenamePopup(new_file, index_list, onefile=True)
 				self.undostack.push(unRename)
 
 			elif len(index_list) > 1:
-				unRename = unRenamePopup(popup.text, index_list, onefile=False)
+				unRename = doRenamePopup(popup.text, index_list, onefile=False)
 				self.undostack.push(unRename)
 				
 			#> need move mutlifile dndler in Undoable
