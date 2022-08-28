@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt, QPoint, QTimer, QUrl, QFileInfo, QDir
 
 from _subclassed import DisDelegate, ModAction, MessagePopUp, MessageBoxwLabel, MessageOverridePopUp
 
-from _helpers import multiCopyHandler, 
+from _helpers import multiCopyHandler 
 
 from _undoCommands import *
 

@@ -1,7 +1,10 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
-from _subclassed import DisDelegate, FileSystemModel, Tree
+from _subclassed import DisDelegate, FileSystemModel
+
+from _mainImplementation import Tree
+
 import sys
 
 class Test(QWidget):
