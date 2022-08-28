@@ -168,7 +168,7 @@ class unMoveToNewFolderPopup(QUndoCommand):
 				print(file_to_rename)
 				shutil.move(file_to_rename, self.new_folder)
 		
-		self.parent.Mexpand(self.model.index(self.new_folder, 0))
+		self.parent.OV_expand(self.model.index(self.new_folder, 0))
 	
 	def undo(self):
 		# -> moving files
@@ -669,7 +669,6 @@ class Tree(QTreeView):
 		self.removeOuterFolderAction.triggered.connect(lambda event: self.removeOuterFolderPopup(event))
 
 		self.moveToNewFolderAction = ModAction('Move to New Folder', QKeySequence(Qt.Modifier.ALT | Qt.Modifier.SHIFT | Qt.Key.Key_N), self)
-		# self.moveToNewFolderAction.setShortcut(QKeySequence("Alt+Shift+N"))
 		self.moveToNewFolderAction.triggered.connect(lambda event: self.MovetoNewFolderPopup(event))
 
 		self.createFolderAction = ModAction('Create Folder', QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_N), parent=self)
@@ -740,43 +739,6 @@ class Tree(QTreeView):
 			msgBox = MessagePopUp(f"Welp! Are you sure you want to open {len(selected_index)} files consecutively?", "This will slow down the prosessing")
 			if msgBox.clickedbutton == QMessageBox.StandardButton.No:
 				return
-
-		# if self.isLeft:  # make the final mechanism
-		# 	for indep in selected_index:
-		# 		if indep.column() == 0:
-		# 			model = index.model()
-		# 			fileinfo = model.fileInfo(indep)
-
-		# 			complete_proj_file = fileinfo.absoluteFilePath()
-
-		# 			# temp_project_path = f"{temp}/{self.fileName}"
-					
-		# 			# if not os.path.exists(temp_project_path):
-		# 			# 	os.mkdir(temp_project_path)
-					
-		# 			# files_list = os.listdir(self.project_dir)
-		# 			# print(files_list)
-		# 			# for item in files_list:
-		# 			# 	print(f"{self.project_dir}{item} {temp_project_path}/{item}")
-		# 			# 	os.link(f"{self.project_dir}{item}", f"{temp_project_path}/{item}")
-		# 			# 	# print(f"""mklink /h \"{temp_project_path}/{item}\" \"{self.project_dir}{item}\" """)
-		# 			# 	# subprocess.run(f"""mklink /h \"{temp_project_path}/{item}\" \"{self.project_dir}{item}\" """)
-
-		# 			# os.link(complete_proj_file, f"{temp_project_path}/{self.fileName}")
-
-		# 			# print(f"""ln --recursive \"{self.project_dir}\" \"{temp_project_path}\"""")
-		# 			# subprocess.run(f"""ln --recursive \"{self.project_dir}\" \"{temp_project_path}\"""")
-				
-		# 			QDesktopServices.openUrl(QUrl.fromLocalFile(complete_proj_file))
-
-		# 		# note if the file is already open, then when a file is dropped on the self.project_dir (.ai folder) we just make a hard link to the tem_project_path
-		
-		# elif self.isRight:
-		# 	for indep in selected_index:
-		# 		if indep.column() == 0:
-		# 			model = index.model()
-		# 			fileinfo = model.fileInfo(indep)
-		# 			QDesktopServices.openUrl(QUrl.fromLocalFile(fileinfo.absoluteFilePath()))
 
 		# same opem mechanism for both tree
 		for indep in selected_index:
@@ -890,12 +852,13 @@ class Tree(QTreeView):
 		# context menu #
 		pass
 
+    #[Overload] - OV_expand
 	@dispatch(QModelIndex)
-	def Mexpand(self, index: QModelIndex):
+	def OV_expand(self, index: QModelIndex):
 		self.expand(index)
 	
 	@dispatch(list)
-	def _(self, index_list: list[QModelIndex]):
+	def OV_expand(self, index_list: list[QModelIndex]):
 		for index in index_list:
 			self.expand(index)
 
