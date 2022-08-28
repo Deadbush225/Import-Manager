@@ -43,7 +43,7 @@ def OV_exists(index_list, name):
 	Returns:
 		None: if meets an index pointing to a file 
 		True: if any exists
-		False: if none exists
+		list: if none exists, the list contains the valid path
 	"""
 
 	model : QFileSystemModel = index_list[0].model() #getting an index sample
@@ -133,6 +133,57 @@ class doCreateFolder(QUndoCommand):
 		
 		QFile(self.new_folder).moveToTrash()
 
+class unRenamePopup(QUndoCommand):
+	def __init__(self, newfolder, index_list: list, onefile=False):
+		"""_summary_
+
+		Args:
+			newfolder (str): the text inputed in the popup
+			index_list (list): _description_
+			onefile (bool, optional): set to true if there's only 1 file selected. Defaults to False.
+		"""		
+		super().__init__()
+		self.new_file = newfolder
+		self.one_file = onefile
+		self.index_list = index_list
+		self.converted = []
+
+	def redo(self):
+		if self.one_file:
+			for index_fileinfo in self.index_list:
+				# -> removing the folder/file
+				file = QFile(self.new_file)
+				self.restore_path = file.fileName()
+
+				file.moveToTrash()
+				self.recycle_path = file.fileName()
+
+				# -> renaming the folder/file
+				self.original_name = index_fileinfo.absoluteFilePath()
+				os.rename(self.original_name, self.new_file)
+
+		elif not self.one_file:
+			for index_fileinfo in self.index_list:
+				if index_fileinfo.isFile():
+					new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file + "." + index_fileinfo.suffix()
+				elif index_fileinfo.isDir():
+					new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file
+				
+				proofed_name = multiCopyHandler(new_path)
+				
+				self.converted.append([index_fileinfo.absoluteFilePath(), proofed_name])
+				os.rename(index_fileinfo.absoluteFilePath(), proofed_name)
+	
+	def undo(self):
+		if self.one_file:
+			shutil.move(self.recycle_path, self.restore_path)
+
+			os.rename(self.new_file, self.original_name)
+
+		elif not self.one_file:
+			for item in range(len(self.index_list)):
+				os.rename(self.converted[item][1], self.converted[item][0])
+
 class unMoveToNewFolderPopup(QUndoCommand):
 	def __init__(self, parent, newfolder, index_list, model, override=False):
 		super().__init__()
@@ -184,57 +235,6 @@ class unMoveToNewFolderPopup(QUndoCommand):
 			shutil.move(self.recycle_path, self.restore_path)
 		
 		QFile(self.new_folder).moveToTrash()
-
-class unRenamePopup(QUndoCommand):
-	def __init__(self, newfolder, index_list: list, onefile=False):
-		"""_summary_
-
-		Args:
-			newfolder (str): the text inputed in the popup
-			index_list (list): _description_
-			onefile (bool, optional): set to true if there's only 1 file selected. Defaults to False.
-		"""		
-		super().__init__()
-		self.new_file = newfolder
-		self.one_file = onefile
-		self.index_list = index_list
-		self.converted = []
-
-	def redo(self):
-		if self.one_file:
-			for index_fileinfo in self.index_list:
-				# -> removing the folder/file
-				file = QFile(self.new_file)
-				self.restore_path = file.fileName()
-
-				file.moveToTrash()
-				self.recycle_path = file.fileName()
-
-				# -> renaming the folder/file
-				self.original_name = index_fileinfo.absoluteFilePath()
-				os.rename(self.original_name, self.new_file)
-
-		elif not self.one_file:
-			for index_fileinfo in self.index_list:
-				if index_fileinfo.isFile():
-					new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file + "." + index_fileinfo.suffix()
-				elif index_fileinfo.isDir():
-					new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file
-				
-				proofed_name = multiCopyHandler(new_path)
-				
-				self.converted.append([index_fileinfo.absoluteFilePath(), proofed_name])
-				os.rename(index_fileinfo.absoluteFilePath(), proofed_name)
-	
-	def undo(self):
-		if self.one_file:
-			shutil.move(self.recycle_path, self.restore_path)
-
-			os.rename(self.new_file, self.original_name)
-
-		elif not self.one_file:
-			for item in range(len(self.index_list)):
-				os.rename(self.converted[item][1], self.converted[item][0])
 
 class unDeleteFilePopup(QUndoCommand):
 	def __init__(self, index_list: list):
@@ -508,106 +508,6 @@ class ModAction(QAction):
 		self.setShortcut(key_sequence)
 		self.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
-# -> separation
-class QHSeparationLine(QFrame):
-	"""
-	a horizontal separation line\n
-	"""
-
-	def __init__(self):
-		super().__init__()
-		# self.setMinimumWidth(1)
-		self.setFixedHeight(2)
-		self.setFrameShape(QFrame.Shape.HLine)
-		self.setFrameShadow(QFrame.Shadow.Sunken)
-		self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-
-# -> models
-# deprecated (needs to be ported to pyqt6)
-class DirProxy(QSortFilterProxyModel):
-	nameFilters = ''
-	hideMode = False  # false to make it disable instead
-	def __init__(self):
-		super().__init__()
-		self.dirModel = QFileSystemModel()
-		self.dirModel.setFilter(QDir.NoDotAndDotDot | QDir.AllDirs | QDir.Files) # <- added QDir.Files to view all files
-		self.setSourceModel(self.dirModel)
-
-	def flags(self, index):
-		enabled = (Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled | Qt.ItemIsEnabled)
-		disabled = (Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled)
-		if not self.hideMode:
-			index = self.mapToSource(index)
-			if not index.isValid():
-				return 0
-
-			# Disable even rows, enable odd rows
-			# if index.row() % 2 == 0:
-			#     return Qt.NoItemFlags
-			# else:
-			#     return Qt.ItemIsEnabled
-			if self.dirModel.isDir(index):
-				qdir = QDir(self.dirModel.filePath(index))
-				if self.nameFilters:
-					qdir.setNameFilters(self.nameFilters)
-				if bool(qdir.entryInfoList(qdir.NoDotAndDotDot|qdir.AllEntries|qdir.AllDirs)):
-					return self.enabled
-				else:
-					return self.disabled
-
-			else:  # <- index refers to a file
-				qdir = QDir(self.dirModel.filePath(index))
-
-				if qdir.match(self.nameFilters, self.dirModel.fileName(index)):
-					return self.enabled
-				else:
-					return self.disabled # <- returns true if the file matches the nameFilters
-		return self.enabled
-
-	def setNameFilters(self, filters):
-		if not isinstance(filters, (tuple, list)):
-			filters = [filters]
-		self.nameFilters = filters
-		self.invalidateFilter()
-	
-	def hasChildren(self, parent):
-		sourceParent = self.mapToSource(parent)
-		if not self.dirModel.hasChildren(sourceParent):
-			return False
-		qdir = QDir(self.dirModel.filePath(sourceParent))
-		return bool(qdir.entryInfoList(qdir.NoDotAndDotDot|qdir.AllEntries|qdir.AllDirs))
-	
-	def filterAcceptsRow(self, row, parent):
-		if self.hideMode:
-			source = self.dirModel.index(row, 0, parent)
-			if source.isValid():
-				if self.dirModel.isDir(source):
-					qdir = QDir(self.dirModel.filePath(source))
-					if self.nameFilters:
-						qdir.setNameFilters(self.nameFilters)
-					return bool(qdir.entryInfoList(qdir.NoDotAndDotDot|qdir.AllEntries|qdir.AllDirs))
-
-				elif self.nameFilters:  # <- index refers to a file
-					qdir = QDir(self.dirModel.filePath(source))
-					return qdir.match(self.nameFilters, self.dirModel.fileName(source)) # <- returns true if the file matches the nameFilters
-			return True
-		return True
-
-	# -> reimplementation <- #
-	def fileInfo(self, index):
-		return self.dirModel.fileInfo(self.mapToSource(index))
-
-	def rootPath(self):
-		return self.dirModel.rootPath()
-
-	def filePath(self, index):
-		return self.dirModel.filePath(self.mapToSource(index))
-	
-	def isDir(self, index):
-		return self.dirModel.isDir(self.mapToSource(index))
-	# -> reimplementation <- #
-# deprecated
-
 class ModWebEngineView(QWebEngineView):
 	def __init__(self, scrollArea):
 		super().__init__()
@@ -624,12 +524,22 @@ class ModWebEngineView(QWebEngineView):
 		# print(f"Size: {self.size()}, Rect: {self.rect()}")
 		# print(f"Geometry: {self.frameGeometry()}")
 
+# -> separation
+class QHSeparationLine(QFrame):
+	"""
+	a horizontal separation line\n
+	"""
+
+	def __init__(self):
+		super().__init__()
+		# self.setMinimumWidth(1)
+		self.setFixedHeight(2)
+		self.setFrameShape(QFrame.Shape.HLine)
+		self.setFrameShadow(QFrame.Shadow.Sunken)
+		self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+# -> MVD - (Model View Delegate)
 class Tree(QTreeView):
-	# global project_filenames
-	# global preview_types
-	# global dir_path
-	# global workstation_files
-	# global thumbnail
 
 	isLeft  = False
 	isRight = False
@@ -895,6 +805,10 @@ class Tree(QTreeView):
 
 		popup = MessageBoxwLabel()
 		if popup.returned == QDialog.DialogCode.Accepted:
+			#> Intended Behavior:
+			#>		If no item is selected, folder will be created inside the root
+			#>		If [1|+] is selected, folder will be created inside the selected folders
+			
 			print("algorithim for creating folders")
 
 			#warning: check if the folder exist
@@ -902,62 +816,48 @@ class Tree(QTreeView):
 			index_list = self.selectedIndexes()
 			index_list = [index for index in index_list if index.column() == 0]
 
-			if index_list:
-				#-> try to detect if any folders to be created is already existing
-				ret = OV_exists(index_list, popup.text)
-				if ret == True:
-					override = MessageOverridePopUp().override
-				elif isinstance(ret, list):
-					override = False
-					newfolder_list = ret
-				else: #-> one is not a folder
-					return MessagePopUp("Please only select a folder", "The folder will be created inside the selected folders", buttons=QMessageBox.StandardButton.Ok)
+            
+			ret = OV_exists(index_list, popup.text)
+			    
+			newfolder_list = []
+			new_folder = ""
+			override = False
+			    
+			if ret == True:
+				override = MessageOverridePopUp().override
+			elif isinstance(ret, list):
+				if ret:
+			        # override = False
+				    newfolder_list = ret
+                else:
+                    new_folder = model.rootPath() + QDir.separator() + popup.text
+			else: #-> one is not a folder
+			 	return MessagePopUp("Please only select a folder", "The folder will be created inside the selected folders", buttons=QMessageBox.StandardButton.Ok)
 
-				unCreateFolder = doCreateFolder("", override, newfolder_list, model)
-				self.undostack.push(unCreateFolder)
-
-			else:
-				# if self.modifier_pressed != Qt.KeyboardModifier.ShiftModifier:
-				new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
+			    unCreateFolder = doCreateFolder(new_folder, override, newfolder_list, model)
+			    self.undostack.push(unCreateFolder)
+			
+			#--#
+			
+			# else:
+				# new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
 				
-				if not OV_exists(new_folder):
+				# if not OV_exists(new_folder):
 					# os.mkdir(new_folder)
-					override = False
-				else:
+					# override = False
+				# else:
 					# -> Prompt if override or just use that folder
-					override = MessageOverridePopUp().override
+					# override = MessageOverridePopUp().override
 					# > if no , need after verification of multi copy handler
 					
-				unCreateFolder = doCreateFolder(new_folder, override)
-				self.undostack.push(unCreateFolder)
+				# unCreateFolder = doCreateFolder(new_folder, override)
+				# self.undostack.push(unCreateFolder)
 
 				# note convert this to a redo method and just get tje new folder value and delete it
 				# note incase cancel was clicked, don't remove its folder and just move the files
 
 				#-> When there is selected folder, just create folder inside it
-				# elif self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
-				# 	print("[createFolderPopup] - Shift Mode")
-				# 	for index in index_list:
-				# 		if index.column() == 0:
-				# 			fileIn = model.fileInfo(index)
-				# 			if fileIn.isDir():
-				# 				new_folder = fileIn.absoluteFilePath() + QDir.separator() + popup.text
-
-				# 				if not os.path.exists(new_folder):
-				# 					# os.mkdir(new_folder)
-				# 					pass
-				# 				else:
-				# 					# -> Prompt if override or just use that folder
-				# 					override = MessageOverridePopUp().override
-				# 					# > if no , need after verification of multi copy handler
-								
-				# 				if 'override' in globals():
-				# 					unCreateFolder = doCreateFolder(new_folder, override=override)
-				# 				else:
-				# 					unCreateFolder = doCreateFolder(new_folder)
-
-				# 				self.undostack.push(unCreateFolder)
-
+				
 	def renameFileFolder(self, event):
 		print("renaming")
 		# note if selected is empty then do nothing
@@ -1040,6 +940,8 @@ class Tree(QTreeView):
 			elif len(index_list) > 1:
 				unRename = unRenamePopup(popup.text, index_list, onefile=False)
 				self.undostack.push(unRename)
+				
+			#> need move mutlifile dndler in Undoable
 
 	def MovetoNewFolderPopup(self, event):
 		# note if selected is empty then do nothing
