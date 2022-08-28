@@ -9,399 +9,9 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 import os
 import shutil
-from pathlib import Path, PureWindowsPath
+# from pathlib import Path, PureWindowsPath
 # from functools import singledispatch
-from multipledispatch import dispatch
-
-#[Overload] -> OV_mkdir
-@dispatch(str)
-def OV_mkdir(path):
-	os.mkdir(path)
-
-@dispatch(PureWindowsPath)
-def OV_mkdir(path):
-	os.mkdir(path)
-
-@dispatch(list)
-def OV_mkdir(path_list):
-	for path in path_list:
-		os.mkdir(path)
-
-#[Overload] -> OV_exists
-@dispatch(str)
-def OV_exists(path :str):
-	return os.path.exists(path)
-
-@dispatch(list, str)
-def OV_exists(index_list, name):
-	"""_summary_
-
-	Args:
-		index_list (list): List[QModelIndex], returns None if meets an index pointing to a file
-		name (str): file name to check for existence
-
-	Returns:
-		None: if meets an index pointing to a file 
-		True: if any exists
-		list: if none exists, the list contains the valid path
-	"""
-
-	model : QFileSystemModel = index_list[0].model() #getting an index sample
-
-	folder_list = []
-
-	for index in index_list:
-		fileInfo = model.fileInfo(index)
-		if fileInfo.isDir():
-			folder = Path(fileInfo.filePath(), name)
-			if folder.exists():
-				return True
-			else:
-				folder_list.append(folder)
-				continue
-			
-		return 
-	return folder_list
-	
-def multiCopyHandler(path):
-	p = Path(path)
-	if p.exists():
-		if p.is_file():
-			counter = 1
-			parent = p.parents[0]
-			base = p.stem
-			ext = p.suffix
-
-			while p.exists():
-				if counter == 1:
-					newF = parent / PureWindowsPath(base + " - copy" + ext)
-				else:
-					newF = parent / PureWindowsPath(base + f" - copy ({counter})" + ext)
-				p = Path(newF)
-				counter += 1
-
-		elif p.is_dir():
-			counter = 1
-			parent = p.parents[0]
-			name = p.name
-
-			while p.exists():
-				if counter == 1:
-					newF = parent / PureWindowsPath(name + " - copy")
-				else:
-					newF = parent / PureWindowsPath(name + f" - copy ({counter})")
-				p = Path(newF)
-				counter += 1
-		
-		return str(newF)
-	else:
-		return p.absolute()
-
-# -> undo commands
-class doCreateFolder(QUndoCommand):
-	def __init__(self, newfolder=str, override=False, newfolder_list=[], model=QFileSystemModel):
-		super().__init__()
-		#-> both index_list and mode is partners
-
-		# self.index_list = index_list
-		# index_list = [model.filePath(index) for index in index_list]
-		#-> OV_mkdir() takes str or list[str]
-		self.new_folder = [multiCopyHandler(newfolder) for newfolder in newfolder_list] if newfolder_list else multiCopyHandler(newfolder)
-		self.override = override
-
-	def redo(self):
-		print('redoing')
-		if self.override:
-
-			# -> deleting folder
-			file = QFile(self.new_folder)
-			self.restore_path = file.fileName()
-
-			file.moveToTrash()
-			self.recycle_path = file.fileName()
-
-			# -> creating folder
-			OV_mkdir(self.new_folder)
-			return
-
-		OV_mkdir(self.new_folder)
-	
-	def undo(self):
-		print('undoing')
-		if self.override:
-			shutil.move(self.recycle_path, self.restore_path)
-		
-		QFile(self.new_folder).moveToTrash()
-
-class unRenamePopup(QUndoCommand):
-	def __init__(self, newfolder, index_list: list, onefile=False):
-		"""_summary_
-
-		Args:
-			newfolder (str): the text inputed in the popup
-			index_list (list): _description_
-			onefile (bool, optional): set to true if there's only 1 file selected. Defaults to False.
-		"""		
-		super().__init__()
-		self.new_file = newfolder
-		self.one_file = onefile
-		self.index_list = index_list
-		self.converted = []
-
-	def redo(self):
-		if self.one_file:
-			for index_fileinfo in self.index_list:
-				# -> removing the folder/file
-				file = QFile(self.new_file)
-				self.restore_path = file.fileName()
-
-				file.moveToTrash()
-				self.recycle_path = file.fileName()
-
-				# -> renaming the folder/file
-				self.original_name = index_fileinfo.absoluteFilePath()
-				os.rename(self.original_name, self.new_file)
-
-		elif not self.one_file:
-			for index_fileinfo in self.index_list:
-				if index_fileinfo.isFile():
-					new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file + "." + index_fileinfo.suffix()
-				elif index_fileinfo.isDir():
-					new_path = index_fileinfo.absolutePath() + QDir.separator() + self.new_file
-				
-				proofed_name = multiCopyHandler(new_path)
-				
-				self.converted.append([index_fileinfo.absoluteFilePath(), proofed_name])
-				os.rename(index_fileinfo.absoluteFilePath(), proofed_name)
-	
-	def undo(self):
-		if self.one_file:
-			shutil.move(self.recycle_path, self.restore_path)
-
-			os.rename(self.new_file, self.original_name)
-
-		elif not self.one_file:
-			for item in range(len(self.index_list)):
-				os.rename(self.converted[item][1], self.converted[item][0])
-
-class unMoveToNewFolderPopup(QUndoCommand):
-	def __init__(self, parent, newfolder, index_list, model, override=False):
-		super().__init__()
-		self.model : QFileSystemModel= model
-		self.index_list : list[QModelIndex] = index_list
-		self.override : bool = override
-		self.new_folder = newfolder
-		self.parent : QTreeView = parent
-	
-	def redo(self):
-		# -> creating folder
-		print('redoing')
-		if self.override:
-			# -> deleting folder
-			file = QFile(self.new_folder)
-			self.restore_path = file.fileName()
-
-			file.moveToTrash()
-			self.recycle_path = file.fileName()
-
-			# -> creating folder
-			self.model.mkdir(self.parent.rootIndex(), self.new_folder)
-		else:
-			self.model.mkdir(self.parent.rootIndex(), self.new_folder)
-
-		# -> moving files
-		for index_fileinfo in self.index_list:
-			self.original_folder = index_fileinfo.canonicalPath()
-
-			#warning: make sure that the folder will actually make the folder inside
-			if (index_fileinfo.canonicalPath() == self.model.rootPath()) or (self.model.rootPath() in index_fileinfo.canonicalPath()):  #warning: checking if the files are in the same of the rootfolder
-				file_to_rename = index_fileinfo.canonicalFilePath()
-				print(file_to_rename)
-				shutil.move(file_to_rename, self.new_folder)
-		
-		self.parent.OV_expand(self.model.index(self.new_folder, 0))
-	
-	def undo(self):
-		# -> moving files
-		src_path = self.new_folder
-		trg_path = self.original_folder
-
-		for src_file in Path(src_path).glob('*.*'):
-			shutil.move(src_file, trg_path)
-
-		# -> delete the folder
-		print('undoing')
-		if self.override:
-			shutil.move(self.recycle_path, self.restore_path)
-		
-		QFile(self.new_folder).moveToTrash()
-
-class unDeleteFilePopup(QUndoCommand):
-	def __init__(self, index_list: list):
-		"""_summary_
-
-		Args:
-			newfolder (str): the text inputed in the popup
-			index_list (list): _description_
-			onefile (bool, optional): set to true if there's only 1 file selected. Defaults to False.
-		"""		
-		super().__init__()
-		self.index_list = index_list
-		self.converted = []
-
-	def redo(self):
-		for index_fileinfo in self.index_list:
-			path_to_delete = index_fileinfo.absoluteFilePath()
-			print(f"deleting ... {path_to_delete}")
-
-			file = QFile(path_to_delete)
-			file.moveToTrash()
-			recyclebin_path = file.fileName()
-			
-			self.converted.append([recyclebin_path, path_to_delete])
-	
-	def undo(self):
-		for item in range(len(self.converted)):
-			os.rename(self.converted[item][0], self.converted[item][1])
-		
-		self.converted = []
-
-class unRemoveOuterFolderPopup(QUndoCommand):
-	def __init__(self, index_list, override=False):
-		super().__init__()
-		self.index_list = index_list
-		self.override = override
-		self.converted = {}
-	
-	def redo(self):
-		# -> creating folder
-		print('redoing')
-		for index_fileinfo in self.index_list:
-			selected_dir = Path(index_fileinfo.absolutePath())
-			selected_dir_str = str(selected_dir)
-			parent_dir = selected_dir.parents[0]
-
-			file_data_list = []
-			for file in selected_dir.iterdir():
-				isNameChanged = False
-				beforeNameChanged = None
-
-				# if os.path.exists(file):
-				transfer_file_name = parent_dir / file.name
-				if transfer_file_name.exists():
-					isNameChanged = True
-					beforeNameChanged = file
-
-					transfer_file_name = multiCopyHandler(transfer_file_name)
-
-				shutil.move(file, transfer_file_name)
-
-				file_data = {"file": file, 
-							"destination": transfer_file_name, 
-							"isNameChanged": isNameChanged, 
-							"beforeChangedName": beforeNameChanged}
-				file_data_list.append(file_data)
-			self.converted[selected_dir_str] = file_data_list
-
-			file = QFile(selected_dir_str)
-			file.moveToTrash()
-			self.recycle_path = file.fileName()
-
-	def undo(self):
-		# creating the folders
-		for item in self.converted:
-			# recovering the folder
-			shutil.move(self.recycle_path, item)
-			
-			counter = 0
-			for item1 in range(len(self.converted[item])):
-				file = self.converted[item][counter]["file"]
-				destination = self.converted[item][counter]["destination"]
-				isNameChanged = self.converted[item][counter]["isNameChanged"]
-				beforeChangedName = self.converted[item][counter]["beforeChangedName"]
-
-				if isNameChanged:
-					shutil.move(destination, beforeChangedName)
-				
-				shutil.move(destination, file)
-				counter += 1
-
-class unDuplicateFolderPopup(QUndoCommand):
-	def __init__(self, index_list):
-		super().__init__()
-		self.index_list = index_list
-		self.duplicated = []
-	
-	def redo(self):
-
-		for index_fileinfo in self.index_list:
-			selected_file = index_fileinfo.absoluteFilePath()
-			selected_file_obj = Path(selected_file)
-			new_folder = multiCopyHandler(selected_file)
-			
-			file = Path(new_folder)
-			
-			if selected_file_obj.is_dir():
-				shutil.copytree(selected_file, new_folder)
-			elif selected_file_obj.is_file():
-				shutil.copyfile(selected_file, new_folder)
-			
-			self.duplicated.append(new_folder)
-	
-	def undo(self):
-		
-		for item in self.duplicated:
-			file = QFile(item)
-			file.moveToTrash()
-		
-		self.duplicated = []
-
-class unMoveToRootPopup(QUndoCommand):
-	file_data_list = []
-	
-	def __init__(self, index_list, root_path, override=False):
-		super().__init__()
-		self.index_list = index_list
-		self.root_path = root_path
-		self.override = override
-	
-	def redo(self):
-		for index_fileinfo in self.index_list:
-			file_name = index_fileinfo.absoluteFilePath()
-			file = Path(file_name)
-
-			isNameChanged = False
-			beforeNameChanged = None
-
-			transfer_file_name = Path(self.root_path, file.name)
-			if transfer_file_name.exists():
-				isNameChanged = True
-				beforeNameChanged = file
-
-				transfer_file_name = multiCopyHandler(transfer_file_name)
-
-			shutil.move(file, transfer_file_name)
-
-			file_data = {"file": file, 
-							"destination": transfer_file_name, 
-							"isNameChanged": isNameChanged, 
-							"beforeChangedName": beforeNameChanged}
-			self.file_data_list.append(file_data)
-	
-	def undo(self):
-		for item in self.file_data_list:
-
-			file = item["file"]
-			destination = item["destination"]
-			isNameChanged = item["isNameChanged"]
-			beforeChangedName = item["beforeChangedName"]
-
-			if isNameChanged:
-				shutil.move(destination, beforeChangedName)
-			
-			shutil.move(destination, file)
-		
-		self.file_data_list = []
+# from multipledispatch import dispatch
 
 # -> message popups
 class MessagePopUp(QMessageBox):
@@ -434,8 +44,8 @@ class MessageOverridePopUp():
 		overridePopup = MessagePopUp("The folder with the same name already OV_exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
 
 		if overridePopup.clickedbutton == QMessageBox.StandardButton.Yes:
-			self.override = True
 			self.confirmOverride = MessageOverrideConfirmationPopUp().confirmOverride
+			self.override = self.confirmOverride.confirmOverride
 			
 		elif overridePopup.clickedbutton == QMessageBox.StandardButton.No:
 			self.override = False
@@ -524,6 +134,400 @@ class ModWebEngineView(QWebEngineView):
 		# print(f"Size: {self.size()}, Rect: {self.rect()}")
 		# print(f"Geometry: {self.frameGeometry()}")
 
+class ModDict():
+	current_group = None
+	
+	def __init__(self):
+		super().__init__()
+
+		self._dict = dict()
+		self.current_group_map = list()
+
+	# @property
+	# def current_group(self):
+	# 	print("getting value")
+	# 	return self._current_group
+	# 	# print(self.current_group)
+
+	# @current_group.setter
+	# def current_group(self, value):
+	# 	print("setting value")
+	# 	# print(self.current_group)
+	# 	self._current_group = value
+	def __eq__(self, other):
+		return self._dict == other._dict
+
+	def __str__(self):
+		return str(self._dict)
+
+	def __repr__(self):
+		return "< ModDict object >"
+
+	def __getitem__(self, index: str):
+		# if "/" in index:
+		# 	return ModDict.get_inner_group()[index]
+		x = self.existing_group_checker()[index]
+		return x
+		# return self.current_group[index] if self.current_group is not None else self._dict[index]
+
+	def __setitem__(self, index, value):
+		# if "/" in index:
+		# 	ModDict.get_inner_group()[index] = value
+		# 	return
+
+		self.existing_group_checker()[index] = value
+
+	def convert_to_settings(self): #-> ModSettings:
+		
+		# x = self._dict.keys()
+
+		def get_groups(dict_: dict, output=None):
+			if output is None:
+				output = ModSettings("Import Manager", "Settings")
+
+			keys_groups = dict_.keys()
+
+			for key_group in keys_groups:
+				if isinstance(dict_[key_group], dict):
+					# self.beginGroup(key_group)
+					output.beginGroup(key_group)
+					get_groups(dict_[key_group], output=output)
+					output.endGroup()
+					# self.endGroup(key_group)
+				else: # -> not inside a group
+					if dict_[key_group] == True:
+						output.setValue(key_group, 1)
+					elif dict_[key_group] == False:
+						output.setValue(key_group, 0)
+					else:
+						output.setValue(key_group, dict_[key_group])
+			
+			return output
+
+			# get_groups(groups, output)
+		
+
+		return get_groups(self._dict)
+
+	def existing_group_checker(self) -> dict:
+		"""_summary_
+
+		Returns:
+			dict: sets the current group if existing else the self._dict
+		"""
+		
+		x = self.current_group if self.current_group is not None else self._dict
+		return x
+
+	def beginGroup(self, keys: str):
+		self.current_group_map += keys.split("/") # convert to list
+		self.reevaluateCurrentGroup()
+		# self.current_group = ModDict.get_inner_group(self._dict, self.current_group_map)
+		# map the current group as the dict
+
+	def endGroup(self, keynum=1):
+		self.current_group_map = self.current_group_map[:0-keynum]
+		self.reevaluateCurrentGroup()
+
+	def clearGroup(self):
+		self.current_group_map.clear()
+		self.reevaluateCurrentGroup()
+	
+	def reevaluateCurrentGroup(self) -> None:
+		self.current_group = ModDict.get_inner_group(self._dict, self.current_group_map)
+
+	@staticmethod
+	def get_inner_group(dict_: dict, keys :list) -> dict:
+		if keys:
+			first, rest = keys[0], keys[1:]
+			try:
+				if rest:
+					return ModDict.get_inner_group(dict_[first], rest)
+				else:
+					return dict_[first]
+			except Exception as e:
+				print(e)
+				return dict()
+		else: # means that no keys
+			return dict_
+
+			
+	# @staticmethod
+	def get_list_from_settings(self, group = "") -> list:
+		list_ = list()
+
+		try:
+			if group:
+				keys = group.split("/")
+
+				list_ = ModDict.get_inner_group(self._dict, keys)
+			
+			else:
+				list_ = list(self._dict.keys())
+		except Exception as e:
+			print(e)
+		
+		return list_		
+
+	# @staticmethod
+	def get_dict_from_settings(self, group = "") -> dict:
+		# aliases = FileSystemView.get_list_from_settings(settings, group)
+		# alias_path = {alias, aliases[alias]}
+		return self.get_inner_group(self._dict, group.split("/"))
+
+	# -> exclusive for Import Manager
+	def get_default_workstation(self) -> list:
+		"""_summary_
+
+		Returns:
+			list: returns the alias and path for the default workstations
+		"""
+
+		return self._dict["Workstation Paths"]["Workstations"][0]
+
+	def get_workstations(self) -> list:
+		"""_summary_
+
+		Returns:
+			dict: returns the list all of workstations (including the default)
+			first is the default workstation
+		"""
+
+		# dict_ = []
+
+		# default_workstation = self.get_default_workstation()
+		# dict_[default_workstation[0]] = default_workstation[1]
+
+		workstations = self._dict["Workstation Paths"]["Workstations"]
+
+		# dict_ |= workstations
+
+		return workstations
+	
+	def get_workstations_aliases(self) -> list:
+		workstations = [item[0] for item in self._dict["Workstation Paths"]["Workstations"]]
+		return workstations
+
+class ModSettings(QSettings):
+	# def save_list_to_settings(self, list) -> None:
+	# 	i = 0
+	# 	for item in list:
+	# 		i += 1
+	# 		self.setValue(f"workstation {i}", item)
+	
+	def __str__(self):
+		return str(self.allKeys())
+
+	def __repr__(self):
+		return "< ModDict object >"
+
+	def get_list_from_settings(self, group = "") -> list:
+		
+		if group:
+			self.beginGroup(group)
+
+		keys = self.allKeys()
+		
+		if group:
+			self.endGroup()
+
+		print(keys)
+		return keys
+	
+	def get_dict_from_settings(self, group = "") -> dict:
+		
+		if group:
+			self.beginGroup(group)
+
+		aliases = self.get_list_from_settings()
+		alias_path = {alias: self.value(alias) for alias in aliases} 
+		
+		if group:
+			self.endGroup()
+		
+		return alias_path
+	
+	def convert_to_dict(self) -> ModDict:
+		groups = self.childGroups()
+		keys = self.childKeys()
+		
+		# output = dict()
+		
+		def get_group(groups: list, output = None):
+			if output is None:
+				output = ModDict()
+
+			for group in groups:
+				self.beginGroup(group)
+				
+				sub_groups = self.childGroups()
+				sub_keys = self.childKeys()
+				
+				group_dict = {}
+				
+				for sub_key in sub_keys:
+					val = self.value(sub_key)
+					if val in [1, 'true']:
+						group_dict[sub_key] = True
+					elif val in [0, 'false']:
+						group_dict[sub_key] = False
+					else:
+						group_dict[sub_key] = val
+
+					# reconvert back to 1 and 0
+
+				#output[setting.group().rsplit("/")[-1]] = group_dict
+				
+				output[self.group()] = group_dict
+				
+				#setting.endGroup()
+				
+				get_group(sub_groups, group_dict)
+				
+				self.endGroup()
+			
+			return output
+		
+		partial = get_group(groups)
+		
+		for key in keys:
+			partial[key] = self.value(key)
+		
+		return partial
+
+# only delete is on tha cotextmenu
+class ModTableWidget(QTableWidget):
+	txtBeforeDblClick = None
+	def __init__(self, row, column, parent=None):
+		super().__init__(row, column, parent)
+		self._parent = parent
+
+		# self.setStyleSheet(r"""
+		# QPushButton {
+		# 	background-color: #eeeeee
+		# }
+		# """)
+
+		self.setHorizontalHeaderLabels(["Alias", "Path", ""])
+		
+		# self.horizontalHeader().setDefaultSectionSize(40)
+
+		# self.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
+		self.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents | QHeaderView.ResizeMode.Interactive)
+		self.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+		self.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+		# self.horizontalHeader().setStretchLastSection(True)
+		self.horizontalHeader().setMinimumSectionSize(30)
+		# self.setColumnWidth(0, 100)
+
+		self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+
+		self.is_default_group = QButtonGroup()
+
+		self.itemDoubleClicked.connect(self._doubleClick)
+		self.itemChanged.connect(self._itemChanged)
+		# DEBUG
+		# for item in range(10):
+			# self.addItem(str(item), str(item))
+		# DEBUG
+
+		# self.customContextMenuRequested.connect(self.context_menu)
+		# self.setContextMenuPolicy(Qt.CustomContextMenu)
+
+		# self.deleteItemAction = QAction('Delete', self)
+		# self.deleteItemAction.setShortcutVisibleInContextMenu(True)
+		# self.deleteItemAction.setShortcut(QKeySequence(Qt.Key_Delete))
+		# self.deleteItemAction.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+		# self.deleteItemAction.triggered.connect(lambda event: self.deleteItem(event))
+	# def delete_row(self, row):
+
+	def addItem(self, alias, path, checked=False, row=-1):
+		last_row_index = self.rowCount() if row == -1 else row
+		self.insertRow(last_row_index)
+
+		folder_alias_item = QTableWidgetItem()
+		folder_alias_item.setText(alias)
+		folder_alias_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+
+		self.setItem(last_row_index, 0, folder_alias_item)
+
+		folder_path_item = QTableWidgetItem()
+		folder_path_item.setText(path)
+		folder_path_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+
+		self.setItem(last_row_index, 1, folder_path_item)
+
+		# wrapper = QWidget()
+		# layout = QHBoxLayout()
+		# layout.setContentsMargins(0, 0, 0, 0)
+
+		is_default_icon = QIcon(r"Icons\home.png")
+		is_default_btn = QPushButton(is_default_icon, "")
+		is_default_btn.setMaximumWidth(30)
+		is_default_btn.setFlat(True)
+		is_default_btn.setCheckable(True)
+		is_default_btn.setChecked(checked)
+		is_default_btn.clicked.connect(self._parent.set_as_default)
+		# layout.addWidget(is_default_btn)
+
+		# print("Button Text: " + is_default_btn.palette().color(QPalette.Disabled, QPalette.ButtonText).name())
+		# print("Button: " + is_default_btn.palette().color(QPalette.Disabled, QPalette.Button).name())
+		# print("Highlight: " + is_default_btn.palette().color(QPalette.Disabled, QPalette.Highlight).name())
+		# print("Highlighted Text: " + is_default_btn.palette().color(QPalette.Disabled, QPalette.HighlightedText).name())
+
+		# is_default_btn.palette().setColor(QPalette.ButtonText, QColor("#9a9a9a"))
+		# is_default_btn.palette().setColor(QPalette.Button, QColor("#eeeeee"))
+		# is_default_btn.palette().setColor(QPalette.Highlight, QColor("#3778f6"))
+		# is_default_btn.palette().setColor(QPalette.HighlightedText, QColor("#ffffff"))
+
+		# wrapper.setLayout(layout)
+
+		self.is_default_group.addButton(is_default_btn)
+		self.setCellWidget(last_row_index, 2, is_default_btn)
+
+		# self.model().setData(self.model().index(last_row_index, 2), Qt.AlignCenter, Qt.TextAlignmentRole)
+
+	def get_updated_workstations_list(self) -> list:
+		output = []
+
+		row_cnt = self.rowCount()
+		for row in range(row_cnt):
+			per_row = []
+			for column in range(self.columnCount() - 1): # exclude last column
+				item_txt = self.item(row, column).text()
+
+				per_row.append(item_txt)
+
+			output.append(per_row)
+		
+		return output
+
+	def get_updated_workstations_alias_list(self) -> list:
+		output = [self.item(row, 0).text() for row in range(self.rowCount())]
+		return output
+		# for row in range(self.rowCount()):
+
+	def _doubleClick(self, item):
+		if item.column() == 0: # alias column
+			self.txtBeforeDblClick = item.text()
+	
+	def _itemChanged(self, item):
+		if item.column() == 0 and self.txtBeforeDblClick: # alias column
+			text = item.text()
+
+			alias_list = self.get_updated_workstations_alias_list()
+			alias_list.pop(item.row())
+
+			if text in alias_list:
+				self._parent.showMessage("Alias already exists", "Error")
+				item.setText(self.txtBeforeDblClick)
+
+			# for i in range(self.rowCount()):
+			# 	chkTxt = self.item(i, 0).text()
+			# 	if chkTxt == text:
+			# 		item.setText("Error")
+
+
 # -> separation
 class QHSeparationLine(QFrame):
 	"""
@@ -539,613 +543,6 @@ class QHSeparationLine(QFrame):
 		self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
 # -> MVD - (Model View Delegate)
-class Tree(QTreeView):
-
-	isLeft  = False
-	isRight = False
-	current_key = None
-
-	def __init__(self, model):
-		super().__init__()
-		delegate = DisDelegate(self)
-		# self.setItemDelegateForColumn(0, delegate)
-		self.setItemDelegate(delegate)
-		
-		self.undostack = QUndoStack()
-
-		self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Expanding)
-		self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-		self.customContextMenuRequested.connect(self.context_menu)
-		self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
-		self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-		self.doubleClicked.connect(self.openFile)
-		self.setDefaultDropAction(Qt.DropAction.CopyAction)
-		self.viewport().setAcceptDrops(True)
-		self.setAlternatingRowColors(True)
-		self.setDropIndicatorShown(True)
-
-		self.setModel(model)
-
-		# self.resizeColumnToContents(0)
-		self.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-
-		self.renameAction = ModAction('Rename', Qt.Key.Key_F2, parent=self)
-		self.renameAction.triggered.connect(lambda event: self.renameFileFolder(event))
-
-		self.deleteFileAction = ModAction('Delete', Qt.Key.Key_Delete, parent=self)
-		self.deleteFileAction.triggered.connect(lambda event: self.deleteFile(event))
-		
-		self.removeOuterFolderAction = ModAction('Delete Outer Folder', QKeySequence(Qt.Modifier.SHIFT | Qt.Key.Key_Delete), parent=self)
-		self.removeOuterFolderAction.triggered.connect(lambda event: self.removeOuterFolderPopup(event))
-
-		self.moveToNewFolderAction = ModAction('Move to New Folder', QKeySequence(Qt.Modifier.ALT | Qt.Modifier.SHIFT | Qt.Key.Key_N), self)
-		self.moveToNewFolderAction.triggered.connect(lambda event: self.MovetoNewFolderPopup(event))
-
-		self.createFolderAction = ModAction('Create Folder', QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_N), parent=self)
-		self.createFolderAction.triggered.connect(lambda event: self.createFolderPopup(event))
-		
-		self.duplicateFileFolderAction = ModAction('Duplicate', QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_J), parent=self)
-		self.duplicateFileFolderAction.triggered.connect(lambda event: self.duplicateFolderPopup(event))
-
-		self.moveToRootAction = ModAction('Move to Root', QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_Up), parent=self)
-		self.moveToRootAction.triggered.connect(lambda event: self.moveToRootPopUp(event))
-
-		self.addAction(self.renameAction)
-		self.addAction(self.deleteFileAction)
-		self.addAction(self.duplicateFileFolderAction)
-		self.addAction(self.moveToRootAction)
-		self.addAction(self.removeOuterFolderAction)
-		self.addAction(self.moveToNewFolderAction)
-		self.addAction(self.createFolderAction)
-
-	def keyPressEvent(self, event):
-		#try Key_Control if problem occurs
-		if event.key() == (Qt.Key.Key_Control and Qt.Key.Key_Y):
-			self.undostack.redo()
-		if event.key() == (Qt.Key.Key_Control and Qt.Key.Key_Z):
-			self.undostack.undo()
-
-	def checkDrag(self):
-		modifiers = QApplication.instance().queryKeyboardModifiers()
-		if self.modifiers != modifiers:
-			self.modifiers = modifiers
-			pos = QCursor.pos()
-			# slightly move the mouse to trigger dragMoveEvent
-			QCursor.setPos(pos + QPoint(1, 1))
-			# restore the previous position
-			QCursor.setPos(pos)
-
-	def mousePressEvent(self, event):
-		# print(self.indexAt(event.pos()).row())
-		# if event.button() == Qt.LeftButton:
-			# self.setCurrentIndex(self.indexAt(event.pos()))
-			# self.selectionStart = event.pos
-		# if event.button() == Qt.MouseButton.RightButton:
-		self.dragStartPosition = event.pos()
-
-		return super().mousePressEvent(event)
-
-	def mouseMoveEvent(self, event):
-		# if event.buttons() != Qt.MouseButton.RightButton:
-			# return
-
-		# elif event.buttons() == Qt.LeftButton:
-		#     self.setSelection(QRect(self.selectionStart, event.pos()),QItemSelectionModel.Select)
-		if ((event.pos() - self.dragStartPosition).manhattanLength() < QApplication.startDragDistance()):
-			return
-
-		print("dragging")
-		self.modifiers = QApplication.instance().queryKeyboardModifiers()
-		# a local timer, it will be deleted when the function returns
-		dragTimer = QTimer(interval=500, timeout=self.checkDrag) # 100
-		dragTimer.start()
-		self.startDrag(Qt.DropAction.MoveAction|Qt.DropAction.CopyAction)
-
-	def openFile(self, index):
-		print("opening")
-		selected_index = [index] if len(self.selectedIndexes()) == 0 else [index_ if index_.column() == 0 else None for index_ in self.selectedIndexes()]
-
-		if len(selected_index) > 5:
-			msgBox = MessagePopUp(f"Welp! Are you sure you want to open {len(selected_index)} files consecutively?", "This will slow down the prosessing")
-			if msgBox.clickedbutton == QMessageBox.StandardButton.No:
-				return
-
-		# same opem mechanism for both tree
-		for indep in selected_index:
-			model = self.model()
-			fileinfo = model.fileInfo(indep)
-			path = fileinfo.absoluteFilePath()
-
-			QDesktopServices.openUrl(QUrl.fromLocalFile(path))
-
-	def dragEnterEvent(self, event):
-		self.passed_m = event.mimeData()
-		event.accept()
-
-	def dragLeaveEvent(self, event):
-		print("leaving")
-		if self.passed_m.hasUrls():
-			self.leaving_urls = [QFileInfo(url.toLocalFile()).fileName() for url in self.passed_m.urls() if url.isLocalFile()]
-
-			print(self.leaving_urls)
-
-		return super().dragLeaveEvent(event)
-
-	def dragMoveEvent(self, event):
-		print("dragMoveEvent")
-		if not event.mimeData().hasUrls():
-			print("no urls")
-			event.ignore()
-			return
-		if QApplication.instance().queryKeyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
-			event.setDropAction(Qt.DropAction.MoveAction)
-		else:
-			event.setDropAction(Qt.DropAction.CopyAction)
-		event.accept()
-
-	def dropEvent(self, event):
-		print("[drop event] - dropped")
-
-		dropAction = event.dropAction()
-
-		# if event.source():
-		ix = self.indexAt(event.position().toPoint())
-		model = self.model()
-
-		if ix.isValid():
-			if not model.isDir(ix):
-				ix = ix.parent()
-			pathDir = model.filePath(ix)
-		else:
-			# for empty drag and drop
-			pathDir = model.rootPath()
-
-		m = event.mimeData()
-		if m.hasUrls():
-			urlLocals = [url for url in m.urls() if url.isLocalFile()]
-			accepted = False
-			for urlLocal in urlLocals:
-				path = urlLocal.toLocalFile()
-				info = QFileInfo(path)
-				destination = QDir(pathDir).filePath(info.fileName()) # <- check if this one OV_exists
-				destination_cannonical = QDir(pathDir).path()
-				source = info.absoluteFilePath()
-				if source == destination:
-					continue  # means they are in the same folder
-				if info.isDir():
-					if dropAction == Qt.DropAction.CopyAction:
-						print(f"QDir -> source: {source} {os.path.exists(source)} | destination: {os.path.exists(destination)} {destination}")
-						# rep = QDir().rename(source, destination)
-						# print(rep)
-						# try: # note try block deprecated
-						#     shutil.move(source, destination)
-						# except Exception as e:
-						#     print(f'[warning droping in the same location] Error: {e}')
-						
-						destination = multiCopyHandler(destination)
-						shutil.copytree(source, destination)
-						
-						# print(rep)
-
-					elif dropAction == Qt.DropAction.MoveAction:
-						destination = multiCopyHandler(destination)
-						shutil.move(source, destination)
-				elif info.isFile():
-					qfile = QFile(source)
-					if QFile(destination).exists():
-						n_info = QFileInfo(destination)
-						
-						# destination = n_info.canonicalPath() + QDir.separator() + n_info.completeBaseName() + " (copy)"
-						# if n_info.completeSuffix():   # for moving files without suffix
-						# 	destination += "." + n_info.completeSuffix()
-						destination = multiCopyHandler(destination)
-
-					if dropAction == Qt.DropAction.CopyAction:
-						# destination = 
-						qfile.copy(destination)
-					elif dropAction == Qt.DropAction.MoveAction:
-						qfile.rename(destination)
-					print(f"added -> {info.fileName()}")  # for debugging
-
-				accepted = True
-			if accepted:
-				event.acceptProposedAction()
-
-		# def canDropMimeData(self, data: QMimeData, action: Qt.DropAction, row: int, column: int, parent: QModelIndex) -> bool:
-		# 	print(f"row {row}, col {column}")
-		# 	if row < 0 and column < 0:
-		# 		target = self.fileInfo(parent)
-		# 	else:
-		# 		target = self.fileInfo(self.index(row, column, parent))
-		# 	return target.isDir() and target.isWritable()
-
-		# context menu #
-		pass
-
-    #[Overload] - OV_expand
-	@dispatch(QModelIndex)
-	def OV_expand(self, index: QModelIndex):
-		self.expand(index)
-	
-	@dispatch(list)
-	def OV_expand(self, index_list: list[QModelIndex]):
-		for index in index_list:
-			self.expand(index)
-
-	# note to fuse the shift mode and non shift mode, just recieve the path and proceed
-	def context_menu(self, event):
-		# print(f"sender -> {self.tree_sender.sender()}") 
-		# self.tree_sender = self.sender()
-		# self.model_sender = self.model()
-
-		self.menu = QMenu(self)
-
-		# self.addAction(renameAction)
-
-		self.menu.addAction(self.renameAction)
-		self.menu.addAction(self.deleteFileAction)
-		self.menu.addAction(self.duplicateFileFolderAction)
-		self.menu.addAction(self.moveToRootAction)
-		self.menu.addAction(self.removeOuterFolderAction)
-		self.menu.addSeparator()
-		self.menu.addAction(self.moveToNewFolderAction)
-		self.menu.addAction(self.createFolderAction)
-
-		# self.modifier_pressed = QApplication.instance().queryKeyboardModifiers()
-		# if self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
-			# print("Shift Pressed")
-
-		# add other required actions
-		self.menu.popup(QCursor.pos())
-	
-	#-> do file operations
-	def createFolderPopup(self, event):
-		# note if selected is empty then just create a new folder
-		model = self.model()  # proxy model not needed
-
-		popup = MessageBoxwLabel()
-		if popup.returned == QDialog.DialogCode.Accepted:
-			#> Intended Behavior:
-			#>		If no item is selected, folder will be created inside the root
-			#>		If [1|+] is selected, folder will be created inside the selected folders
-			
-			print("algorithim for creating folders")
-
-			#warning: check if the folder exist
-
-			index_list = self.selectedIndexes()
-			index_list = [index for index in index_list if index.column() == 0]
-
-            
-			ret = OV_exists(index_list, popup.text)
-			    
-			newfolder_list = []
-			new_folder = ""
-			override = False
-			    
-			if ret == True:
-				override = MessageOverridePopUp().override
-			elif isinstance(ret, list):
-				if ret:
-			        # override = False
-				    newfolder_list = ret
-                else:
-                    new_folder = model.rootPath() + QDir.separator() + popup.text
-			else: #-> one is not a folder
-			 	return MessagePopUp("Please only select a folder", "The folder will be created inside the selected folders", buttons=QMessageBox.StandardButton.Ok)
-
-			    unCreateFolder = doCreateFolder(new_folder, override, newfolder_list, model)
-			    self.undostack.push(unCreateFolder)
-			
-			#--#
-			
-			# else:
-				# new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
-				
-				# if not OV_exists(new_folder):
-					# os.mkdir(new_folder)
-					# override = False
-				# else:
-					# -> Prompt if override or just use that folder
-					# override = MessageOverridePopUp().override
-					# > if no , need after verification of multi copy handler
-					
-				# unCreateFolder = doCreateFolder(new_folder, override)
-				# self.undostack.push(unCreateFolder)
-
-				# note convert this to a redo method and just get tje new folder value and delete it
-				# note incase cancel was clicked, don't remove its folder and just move the files
-
-				#-> When there is selected folder, just create folder inside it
-				
-	def renameFileFolder(self, event):
-		print("renaming")
-		# note if selected is empty then do nothing
-		# note if only one is selected propmt the override
-		# then if multiple is selected just take a way around the renaming
-		model = self.model()
-
-		popup = MessageBoxwLabel()
-		if popup.returned == QDialog.DialogCode.Accepted:
-			print("algorithim for creating folders")
-
-			#warning: check if the folder exist
-
-			index_list = self.selectedIndexes()
-
-			print(f"Folder Name -> '{popup.text}'")
-			# for index in index_list:
-			# 	if index.column() == 0:
-			# 		fileIn = model.fileInfo(index)
-			# 		# new_file = os.path.join(model.rootPath(), popup.folder_name)  # note not root path()
-			# 		new_file = fileIn.absolutePath() + QDir.separator() + popup.folder_name  # note not root path()
-			index_list = [model.fileInfo(index) for index in index_list if index.column() == 0]
-			
-			if len(index_list) == 1:
-				new_file = index_list[0].absolutePath() + QDir.separator() + popup.text + "." + index_list[0].suffix()
-				if not os.path.exists(new_file):
-					# -> just move the folder/files
-					# os.rename(fileIn.absoluteFilePath(), new_file)
-					override = False
-					pass
-				else:
-					# -> Prompt if override or just use that folder
-					msgBox = MessagePopUp("The file/folder with the same name already OV_exists, \n Do you want to Override the old file/folder?", "If you want to just use the old folder just select No", buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
-					if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-						inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
-						# -> Override
-						if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-							# #-> deleting file/folder
-							# shutil.rmtree(new_file)
-							# #-> creating file/folder
-							# os.mkdir(new_file)
-							override = True
-
-							if os.path.isdir(new_file):
-								print(f"isDir -> {new_file}")
-								shutil.rmtree(new_file)
-								
-							elif os.path.isfile(new_file):  
-								os.remove(new_file)
-								print(f"isFile -> {new_file}")
-							
-							# Move the content
-							# source to destination
-							# os.rename(fileIn.absoluteFilePath(), new_file)
-
-						elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
-							return
-
-					elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
-						# -> Don't Override
-						# counter = 1
-						# while os.path.exists(new_file):
-						# 	base_file = new_file
-							
-						# 	new_file = base_file + f" (copy {counter})"
-
-						# 	counter += 1
-						new_file = multiCopyHandler(new_file)
-
-						# os.rename(fileIn.absoluteFilePath(), new_file)
-						override = False
-
-					elif msgBox.clickedbutton == QMessageBox.StandardButton.Cancel:
-						# -> Cancel
-						pass
-
-				unRename = unRenamePopup(new_file, index_list, onefile=True)
-				self.undostack.push(unRename)
-
-			elif len(index_list) > 1:
-				unRename = unRenamePopup(popup.text, index_list, onefile=False)
-				self.undostack.push(unRename)
-				
-			#> need move mutlifile dndler in Undoable
-
-	def MovetoNewFolderPopup(self, event):
-		# note if selected is empty then do nothing
-		model = self.model()
-		# model = proxyModel.sourceModel()
-
-		popup = MessageBoxwLabel()
-		if popup.returned == QDialog.DialogCode.Accepted:
-			print("algorithim for moving to new folders")
-
-			#warning: check if the folder exist
-
-			index_list = self.selectedIndexes()
-			index_list = [index for index in index_list if index.column() == 0]
-
-			print(f"Folder Name -> '{popup.text}'")
-			if index_list:
-				# if self.modifier_pressed != Qt.KeyboardModifier.ShiftModifier:
-				new_folder = model.rootPath() + QDir.separator() + popup.text  # note not root path()
-				
-				ret = OV_exists(index_list, popup.text)
-				if ret == True:
-					override = MessageOverridePopUp().override
-				elif isinstance(ret, list):
-					override = False
-					newfolder_list = ret
-				else:
-					return MessagePopUp("Please only select a folder", " The folder will be created inside the selected folders", buttons=QMessageBox.StandardButton.Ok)
-				
-				#-> need preprocessing of multiCopyHandler
-				unMoveToNewFolder = unMoveToNewFolderPopup(self, new_folder, index_list, model, override=override)
-				self.undostack.push(unMoveToNewFolder)
-
-					# note convert this to a redo method and just get tje new folder value and delete it
-					# note incase cancel was clicked, don't remove its folder and just move the files
-					# for index in index_list:
-					# 	if index.column() == 0:
-					# 		fileIn = model.fileInfo(index)
-					# 		# fileIn = model.fileInfo(proxyModel.mapToSource(index))
-
-					# 		#warning: make sure that the folder will actually make the folder inside
-				
-					# 		# if not fileIn.isDir():
-					# 		# True_or_False = f"{fileIn.canonicalPath()} == {model.rootPath()} : {fileIn.canonicalPath() == model.rootPath()}"
-					# 		# True_or_False = f"{model.rootPath()} in {fileIn.canonicalPath()} : {model.rootPath() in fileIn.canonicalPath()}"
-					# 		if (fileIn.canonicalPath() == model.rootPath()) or (model.rootPath() in fileIn.canonicalPath()):  #warning: checking if the files are in the same of the rootfolder
-					# 			file_to_rename = fileIn.absoluteFilePath()
-					# 			print(file_to_rename)
-					# 			shutil.move(file_to_rename, new_folder)
-
-				# elif self.modifier_pressed == Qt.KeyboardModifier.ShiftModifier:
-				# 	print("[MovetoNewFolderPopup] -> Shift Mode")
-				# 	fileIn = model.fileInfo(index_list[0])
-				# 	new_folder = fileIn.absolutePath() + QDir.separator() + popup.text  # note not root path()
-					
-				# 	if not os.path.exists(new_folder):
-				# 		os.mkdir(new_folder)
-				# 	else:
-				# 		#warning: Prompt if override or just use that folder
-				# 		msgBox = MessagePopUp("The folder with the same name already OV_exists, \n Do you want to Override the old folder?", "If you want to just use the old folder just select No")
-				# 		if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-				# 			inmsgBox = MessagePopUp("Override the folder?", "You can still recover it from the recycle bin")
-				# 			# -> Override
-				# 			if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-				# 				#-> deleting folder
-				# 				shutil.rmtree(new_folder)
-				# 				#-> creating folder
-				# 				os.mkdir(new_folder)
-
-				# 			elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
-				# 				return
-
-				# 		elif msgBox.clickedbutton == QMessageBox.StandardButton.No:
-				# 			# -> Don't Override
-				# 			pass
-
-				# 	for index in index_list:
-				# 		if index.column() == 0:
-				# 			fileIn = model.fileInfo(index)
-
-				# 			#warning: make sure that the folder will actually make the folder inside
-				
-				# 			# if not fileIn.isDir():
-				# 			True_or_False = f"{fileIn.canonicalPath()} == {model.rootPath()} : {fileIn.canonicalPath() == model.rootPath()}"
-				# 			True_or_False = f"{model.rootPath()} in {fileIn.canonicalPath()} : {model.rootPath() in fileIn.canonicalPath()}"
-				# 			if (fileIn.canonicalPath() == model.rootPath()) or (model.rootPath() in fileIn.canonicalPath()):  #warning: checking if the files are in the same of the rootfolder
-				# 				file_to_rename = fileIn.absoluteFilePath()
-				# 				print(file_to_rename)
-				# 				shutil.move(file_to_rename, new_folder)
-
-	def deleteFile(self, event):
-		# print(f"deleting... {self.tree.currentIndex()}")
-		# index_list = [self.tree.currentIndex()]
-		
-		msgBox = MessagePopUp("Do you want to continue?", "You can still recover the file/folder in the recycle bin")
-
-		print(f"{msgBox} : {QMessageBox.StandardButton.Yes} : {msgBox == QMessageBox.StandardButton.Yes}")
-
-		#warning: not working
-
-		if msgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-			model = self.model()
-
-			index_list = self.selectedIndexes()
-
-			index_list = [model.fileInfo(index) for index in index_list if index.column() == 0]
-
-			unDeleteFile = unDeleteFilePopup(index_list)
-			self.undostack.push(unDeleteFile)
-
-	def removeOuterFolderPopup(self, event):
-		# note if selected is empty then do nothing
-
-		model = self.model()
-
-		index_list = self.selectedIndexes()
-		index_list = [model.fileInfo(index) for index in index_list if index.column() == 0]
-		folder_to_be_deleted_list = [index.canonicalPath() for index in index_list]
-	
-		list_of_to_be_deleted = "\n".join(folder_to_be_deleted_list)
-
-		# for index_fileinfo in index_list:
-		# 	# ->
-		# 	filepath = index_fileinfo.absoluteFilePath()
-		# 	canon_filepath = index_fileinfo.canonicalPath()
-			# ->
-
-		# new_file = os.path.join(model.rootPath(), popup.folder_name)  # note not root path()
-		# new_folder = model.rootPath() + QDir.separator() +   # note not root path()
-		
-		# -> Prompt if they are sure
-		inmsgBox = MessagePopUp(f"Delete the folder \n {list_of_to_be_deleted}", "You can still recover it from the recycle bin")
-		if inmsgBox.clickedbutton == QMessageBox.StandardButton.Yes:
-			
-			# parent_dir.rmdir()
-			# shutil.move()
-			# index_list = [model.fileInfo(index) for index in index_list if index.column() == 0]
-			unRemoveOuterFolder = unRemoveOuterFolderPopup(index_list, override=False)
-			self.undostack.push(unRemoveOuterFolder)
-
-		elif inmsgBox.clickedbutton == QMessageBox.StandardButton.No:
-			pass
-
-	def duplicateFolderPopup(self, event):
-		# note if selected is empty then do nothing
-
-		model = self.model()
-
-		print("algorithim for creating folders")
-
-		#warning: check if the folder exist
-
-		index_list = self.selectedIndexes()
-		index_list = [model.fileInfo(index) for index in index_list if index.column() == 0]
-
-		unDuplicateFolder = unDuplicateFolderPopup(index_list)
-		self.undostack.push(unDuplicateFolder)
-
-		# for index in index_list:
-		# 	if index.column() == 0:
-		# 		fileIn: QFileInfo = model.fileInfo(index)
-
-		# 		selected_file = fileIn.absoluteFilePath()
-		# 		new_folder = multiCopyHandler(selected_file)
-				
-		# 		if not os.path.exists(new_folder):  # you can diable this if statement but try to catch an error
-		# 			os.mkdir(new_folder)
-
-		# 	# note convert this to a redo method and just get tje new folder value and delete it
-		# 	# note incase cancel was clicked, don't remove its folder and just move the files;
-		# 		# file_to_rename = fileIn.absoluteFilePath()
-		# 		# print(file_to_rename)
-		# 		shutil.copytree(selected_file, new_folder)
-
-	def moveToRootPopUp(self, event):
-		# note if selected is empty then do nothing
-
-		model: QFileSystemModel = self.model()
-
-		print("algorithim for creating folders")
-
-		#warning: check if the folder exist
-
-		index_list = self.selectedIndexes()
-		index_list = [model.fileInfo(index) for index in index_list if index.column() == 0]
-
-		# for index in index_list:
-		# 	if index.column() == 0:
-		# 		fileIn: QFileInfo = model.fileInfo(index)
-
-		# 		selected_file = fileIn.absoluteFilePath()
-		# 		# new_folder = multiCopyHandler(selected_file)
-				
-		# 		# if not os.path.exists(new_folder):  # you can diable this if statement but try to catch an error
-		# 		# 	os.mkdir(new_folder)
-
-		# 	# note convert this to a redo method and just get tje new folder value and delete it
-		# 	# note incase cancel was clicked, don't remove its folder and just move the files;
-		# 		# file_to_rename = fileIn.absoluteFilePath()
-		# 		# print(file_to_rename)
-		# 		shutil.move(selected_file, model.rootPath())
-
-		unMoveToRoot = unMoveToRootPopup(index_list, model.rootPath(),override=False)
-		self.undostack.push(unMoveToRoot)
 
 class FileSystemModel(QFileSystemModel):
 	# hideMode = False
