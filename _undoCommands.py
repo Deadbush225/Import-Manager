@@ -22,27 +22,28 @@ class doCreateFolder(QUndoCommand):
 
 	def redo(self):
 		print('redoing')
+		
+		self.file = QFilewList(self.new_folder)
 		if self.override:
 
 			# -> deleting folder
-			file = QFile(self.new_folder)
-			self.restore_path = file.fileName()
+			self.restore_path = self.file.fileName()
 
-			file.moveToTrash()
-			self.recycle_path = file.fileName()
+			self.file.moveToTrash()
+			self.recycle_path = self.file.fileName()
 
 			# -> creating folder
 			OV_mkdir(self.new_folder)
 			return
 
-		OV_mkdir(self.new_folder)
+		OV_mkdir(self.file)
 	
 	def undo(self):
 		print('undoing')
 		if self.override:
 			shutil.move(self.recycle_path, self.restore_path)
 		
-		QFile(self.new_folder).moveToTrash()
+		self.file.moveToTrash()
 
 class doRenamePopup(QUndoCommand):
 	def __init__(self, newfolder, index_list: list, onefile=False):

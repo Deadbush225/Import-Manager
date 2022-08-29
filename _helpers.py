@@ -39,6 +39,10 @@ def multiCopyHandler(path):
 
 
 #[Overload] -> OV_mkdir
+@dispatch(QFile)
+def OV_mkdir(path):
+	path.exists()
+
 @dispatch(str)
 def OV_mkdir(path):
 	os.mkdir(path)

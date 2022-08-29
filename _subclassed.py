@@ -611,3 +611,20 @@ class ReadOnlyDelegate(QStyledItemDelegate):
 			option.palette.setBrush(QPalette.Text, QColor("#3daa33"))
 			# option.backgroundBrush = QBrush(QColor("#3daa33"))
 
+# -> wrappers
+class QFilewList():
+	def __init__(self, file):
+		if isinstance(file, QFile):
+			self.file = file
+		elif isinstance(file, list):
+			self.file = [QFile(item) for item in file]
+	
+	def fileName():
+		
+	
+	
+	def moveToTrash(sself:
+		if isinstance(self.file, QFile):
+			self.file.moveToTrash()
+		elif isinstance(self.file, list):
+			[file.moveToTrash() for file in self.file]
