@@ -95,3 +95,15 @@ def OV_exists(index_list, name, model):
 		return 
 	return folder_list
 
+#[Overload] -> OV_Move:
+@dispatch(str, str)
+def OV_Move(str_path, str_path):
+
+@dispatch(PureWindowsPath, PureWindowsPath)
+def OV_Move(pathlib_path, pathlib_path):
+
+@dispatch(PureWindowsPath, str)
+def OV_Move(pathlib_path, str_path):
+	
+@despatch(str, PureWindowsPath)
+def OV_Move(str, PureWindowsPath):

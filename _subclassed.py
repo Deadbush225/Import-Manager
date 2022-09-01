@@ -616,15 +616,19 @@ class QFilewList():
 	def __init__(self, file):
 		if isinstance(file, QFile):
 			self.file = file
+			self.type = QFile
 		elif isinstance(file, list):
 			self.file = [QFile(item) for item in file]
+			self.type = list
 	
 	def fileName():
-		
-	
+		if self.type == QFile:
+			return self.file.fileName()
+		elif self.type == list:
+			return [file.fileName() for file in self.file]
 	
 	def moveToTrash(sself:
-		if isinstance(self.file, QFile):
-			self.file.moveToTrash()
-		elif isinstance(self.file, list):
-			[file.moveToTrash() for file in self.file]
+		if self.type == QFile:
+			return self.file.moveToTrash()
+		elif self.type == list:
+			return [file.moveToTrash() for file in self.file]
