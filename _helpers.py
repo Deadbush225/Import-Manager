@@ -2,6 +2,8 @@ from _subclassed import FileSystemModel
 from pathlib import Path, PureWindowsPath
 from multipledispatch import dispatch
 import os
+import shutil
+
 
 def multiCopyHandler(path):
 	p = Path(path)
@@ -39,6 +41,8 @@ def multiCopyHandler(path):
 
 
 #[Overload] -> OV_mkdir
+# try to add override option here
+
 @dispatch(QFile)
 def OV_mkdir(path):
 	path.exists()
@@ -96,14 +100,39 @@ def OV_exists(index_list, name, model):
 	return folder_list
 
 #[Overload] -> OV_Move:
-@dispatch(str, str)
-def OV_Move(str_path, str_path):
 
-@dispatch(PureWindowsPath, PureWindowsPath)
-def OV_Move(pathlib_path, pathlib_path):
+# @dispatch(str, str)
+# def OV_Move(strPath_source, strPath_dest):
+# 	shutil.move(strPath_source, strPath_dest)
 
-@dispatch(PureWindowsPath, str)
-def OV_Move(pathlib_path, str_path):
+# @dispatch(PureWindowsPath, PureWindowsPath)
+# def OV_Move(pureWindowsPath_source, pureWindowsPath_dest):
+#	shutil.move(pureWindowsPath_source.resolve(), pureWindowsPath_dest.resolve())
+
+# @dispatch(PureWindowsPath, str)
+# def OV_Move(pureWindowsPath_source, strPath_dest):
+#	shutil.move(pureWindowsPath_source.resolve(), strPath_dest)
 	
-@despatch(str, PureWindowsPath)
-def OV_Move(str, PureWindowsPath):
+# @despatch(str, PureWindowsPath)
+# def OV_Move(strPath_source, pureWindowsPath_dest):
+#	shutil.move(strPath_source, pureWindowsPath_dest.resolve())
+
+@dispatch(str, str)
+def OV_Move(strPath_source, strPath_dest):
+	shutil.move(strPath_source, strPath_dest)
+
+@dispatch(list, list)
+def OV_Move(listPath_source, listPath_dest)
+	for i in range(listPath_source):
+		shutil.move(listPath_source[i], listPath_dest[i])
+
+#[OOverload] -> OV_Rename
+@dispatch(str, str)
+def OV_Rename(strPath_source, strPath_dest):
+	os.rename(strPath_source, strPath_dest)
+	
+@dispatch(list, list)
+def OV_Rename(listPath_source, listPath_dest):
+	for i in range(listPath_source):
+		os.resolve(listPath_source[i], listPath_dest[i])
+		
