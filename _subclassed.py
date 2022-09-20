@@ -621,13 +621,13 @@ class QFilewList():
 			self.file = [QFile(item) for item in file]
 			self.type = list
 	
-	def fileName():
+	def fileName(self):
 		if self.type == QFile:
 			return self.file.fileName()
 		elif self.type == list:
 			return [file.fileName() for file in self.file]
 	
-	def moveToTrash(sself:
+	def moveToTrash(self):
 		if self.type == QFile:
 			return self.file.moveToTrash()
 		elif self.type == list:

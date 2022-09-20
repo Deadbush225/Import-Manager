@@ -3,6 +3,7 @@ from PyQt6.QtGui import QUndoCommand, QFileSystemModel
 from PyQt6.QtCore import QFile, QModelIndex
 
 from _helpers import *
+from _subclassed import QFilewList
 
 from pathlib import Path
 import shutil

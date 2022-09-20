@@ -4,6 +4,7 @@ from multipledispatch import dispatch
 import os
 import shutil
 
+from PyQt6.QtCore import QFile
 
 def multiCopyHandler(path):
 	p = Path(path)
@@ -122,7 +123,7 @@ def OV_Move(strPath_source, strPath_dest):
 	shutil.move(strPath_source, strPath_dest)
 
 @dispatch(list, list)
-def OV_Move(listPath_source, listPath_dest)
+def OV_Move(listPath_source, listPath_dest):
 	for i in range(listPath_source):
 		shutil.move(listPath_source[i], listPath_dest[i])
 
